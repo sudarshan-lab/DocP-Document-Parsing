@@ -142,3 +142,110 @@ for ax, image in zip(axes, images):
 result.to_csv('result2.csv',index=False)
 plt.tight_layout()
 plt.show()
+
+
+def pdf_to_image(pdf_path):
+    images = []
+    with fitz.open(pdf_path) as pdf_document:
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            images.append(img)
+    return images
+
+
+def enhance_image(image):
+    # Enhance image contrast
+    enhancer = ImageEnhance.Contrast(image)
+    enhanced_img = enhancer.enhance(2.0)  # Adjust the enhancement factor as needed
+    return enhanced_img
+
+
+def grayscale(image):
+    gray_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    return Image.fromarray(gray_img)
+
+def extract_text_pymupdf(pdf_path):
+    text = ""
+    with fitz.open(pdf_path) as pdf_document:
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            text += page.get_text()
+    return text
+
+def extract_text_pymupdf(pdf_path):
+    text = ""
+    with fitz.open(pdf_path) as pdf_document:
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            text += page.get_text()
+    return text
+
+def extract_text_pypdf2(pdf_path):
+    text = ""
+    with open(pdf_path, "rb") as file:
+        pdf_reader = PyPDF2.PdfReader(file)
+        num_pages = len(pdf_reader.pages)
+        for page_num in range(num_pages):
+            page = pdf_reader.pages[page_num]
+            text += page.extract_text()
+    return text
+
+def extract_text_pdfplumber(pdf_path):
+    text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text()
+    return text
+
+def extract_data_from_pdf(pdf_path):
+    methods = {
+        "PyMuPDF (fitz)": extract_text_pymupdf,
+        "PyPDF2": extract_text_pypdf2,
+        "pdfplumber": extract_text_pdfplumber,
+        "Camelot (Tables)": extract_tables_camelot,
+        "OCRmyPDF": extract_text_ocrmypdf
+
+    }
+    extracted_data = {}
+    for method_name, method_func in methods.items():
+        try:
+            if method_name == "OCRmyPDF":
+                # For OCRmyPDF, convert PDF to images and preprocess
+                images_folder = "ocr_images"
+                pdf_to_image(pdf_path, images_folder)
+                data = method_func(images_folder)
+            else:
+                data = method_func(pdf_path)
+            extracted_data[method_name] = data
+        except Exception as e:
+            extracted_data[method_name] = f"Error: {str(e)}"
+    
+    return extracted_data
+
+def extract_tables_camelot(pdf_path):
+    tables = camelot.read_pdf(pdf_path, flavor='stream', pages='1-end')
+    extracted_tables = []
+    for table in tables:
+        extracted_tables.append(table.df)
+    return extracted_tables
+
+
+def extract_text_ocrmypdf(pdf_path):
+    output_pdf_path = "output_ocrmypdf.pdf"
+    os.system(f"ocrmypdf {pdf_path} {output_pdf_path}")
+    text = extract_text_pymupdf(output_pdf_path)
+    os.remove(output_pdf_path)
+    return text
+
+  
+
+pdf_path = "/content/GRADE CARD-2.pdf"
+extracted_data = extract_data_from_pdf(pdf_path)
+
+# Display results
+for method, data in extracted_data.items():
+    print(f"--- {method} ---")
+    print(data)
+    print("\n")
