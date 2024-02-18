@@ -106,3 +106,29 @@ class ImagePreprocessor:
         return {'multi_scale_feature1': 0.7, 'multi_scale_feature2': 0.9}
 # Initialize ImagePreprocessor
 preprocessor = ImagePreprocessor()
+result = pd.DataFrame()
+fig, axes = plt.subplots(nrows=len(images), figsize=(6, 2*len(images)))
+# Preprocess image
+for ax, image in zip(axes, images):
+    buffer = BytesIO()
+    image.save(buffer, format='JPEG')
+    buffer.seek(0)
+    image = cv2.imdecode(np.frombuffer(buffer.getvalue(), dtype=np.uint8), -1)
+    preprocessed_image = preprocessor.preprocess_image(image)
+    image_pil = Image.fromarray(np.uint8(preprocessed_image))
+    text = pytesseract.image_to_data(preprocessed_image)
+    ex_data = text
+    dataList = list(map(lambda x: x.split('\t'),ex_data.split('\n')))
+    df = pd.DataFrame(dataList[1:],columns = dataList[0])
+    df.dropna(inplace=True)
+    df['conf'] = pd.to_numeric(df['conf']).astype(int)
+    usefulData = df.query('conf >= 10')
+    oneimg_data = pd.DataFrame()
+    oneimg_data["text"] = usefulData["text"]
+    result = pd.concat((result,oneimg_data))
+    ax.imshow(image, cmap='gray')
+    ax.axis('off')
+
+result.to_csv('result2.csv',index=False)
+plt.tight_layout()
+plt.show()
