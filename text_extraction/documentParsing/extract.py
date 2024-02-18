@@ -9,6 +9,16 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 from pdf2image import convert_from_path
 
+from pdf2image import convert_from_path
+from PIL import Image, ImageEnhance
+import cv2
+import numpy as np
+import fitz
+import PyPDF2
+import pdfplumber
+import camelot
+import os
+
 
 def extractionUsingPillow(filePath):
     images = convert_from_path(filePath)
