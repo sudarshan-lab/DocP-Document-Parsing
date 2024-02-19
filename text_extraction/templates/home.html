@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-center">
+    <form action="{% url 'home' %}" method="post" enctype="multipart/form-data" class="form-inline my-2 my-lg-0">
+        {% csrf_token %}
+        <input type="file" name="file" class="form-control mb-2 mr-sm-2" required>
+        <button type="submit" class="btn btn-primary mb-2">Upload</button>
+    </form>
+</div>
+    {% if success_message %}
+    <div class="d-flex justify-content-center">
+        <div class="alert alert-success" role="alert" style="text-align: center; width: auto; padding: 5px;">
+            {{ success_message }}
+        </div>
+    </div>
+    {% endif %}
+   
+
+
+
+    {% if extracted_text %}
+    <div class="d-flex justify-content-center" style="margin-top: 20px;">
+        <textarea readonly class="form-control" rows="10" style="width: 80%; resize: none;">{{ extracted_text }}</textarea>
+    </div>
+    {% endif %}
+{% endblock %}
