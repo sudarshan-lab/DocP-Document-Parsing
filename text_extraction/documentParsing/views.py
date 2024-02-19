@@ -65,6 +65,13 @@ def custom_logout(request):
     return redirect('home')
 
 
+@login_required
+def view_history(request):
+    uploaded_files = UploadedFile.objects.filter(user=request.user).order_by('-uploaded_at')
+    return render(request, 'history.html', {'uploaded_files': uploaded_files})
+
+
+
 # def upload(request):
 #     if request.method == 'POST' and request.FILES['file']:
 #         file = request.FILES['file']
