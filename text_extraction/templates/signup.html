@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width: 300px;">  
+    <h2>Signup</h2>
+    <form method="post" style="width: auto;">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="d-flex justify-content-between"> 
+            <button type="submit" class="btn btn-primary">Signup</button>
+            <a href="{% url 'login' %}" class="btn btn-secondary">Login</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
