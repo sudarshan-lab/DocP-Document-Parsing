@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; width: fit-content; margin-left: 0;">
+    <div style="margin-right: 10px;"> 
+        <h2>Login</h2>
+        <form method="post" style="width: fit-content;">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div style="display: flex; justify-content: space-between;">
+                <button type="submit" class="btn btn-primary" style="margin-right: 10px;">Login</button>
+                <a href="{% url 'signup' %}" class="btn btn-secondary">Signup</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
