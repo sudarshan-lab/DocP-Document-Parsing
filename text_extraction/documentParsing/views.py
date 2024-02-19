@@ -60,3 +60,19 @@ def signup(request):
     else:
         form = SignUpForm()
     return render(request, 'signup.html', {'form': form})
+def custom_logout(request):
+    logout(request)
+    return redirect('home')
+
+
+# def upload(request):
+#     if request.method == 'POST' and request.FILES['file']:
+#         file = request.FILES['file']
+#         fs = FileSystemStorage()
+#         filename = fs.save(file.name, file)
+#         uploaded_file_url = fs.url(filename)
+#         UploadedFile.objects.create(file=filename)
+#         # Add a success message
+#         messages.success(request, 'Your file has been uploaded successfully!')
+#         return redirect('upload')  # Redirect back to the same 'upload' page
+#     return render(request, 'upload.html')
