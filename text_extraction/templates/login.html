@@ -1,17 +1,49 @@
 {% extends "base.html" %}
-
 {% block content %}
-<div style="display: flex; justify-content: space-between; width: fit-content; margin-left: 0;">
-    <div style="margin-right: 10px;"> 
-        <h2>Login</h2>
-        <form method="post" style="width: fit-content;">
+
+<style>
+    .login-card {
+        margin: 2rem auto;
+        padding: 2rem;
+        width: 100%;
+        max-width: 400px; 
+        background-color: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        transform: translateY(-2%);
+        transition: transform 0.3s ease;
+    }
+    .login-card:hover {
+        transform: translateY(-5%) scale(1.02);
+    }
+    .form-control {
+        margin-bottom: 1rem;
+    }
+    .form-group, .btn-group {
+        margin-bottom: 1rem;
+    }
+    .btn-primary, .btn-secondary {
+        width: calc(50% - 5px);
+    }
+    .btn-group{ 
+        display: flex;
+        justify-content: space-evenly;
+        column-gap: 90px; 
+    }
+
+</style>
+
+<div class="container">
+    <div class="login-card">
+        <h2 class="text-center">Login</h2>
+        <form method="post">
             {% csrf_token %}
             {{ form.as_p }}
-            <div style="display: flex; justify-content: space-between;">
-                <button type="submit" class="btn btn-primary" style="margin-right: 10px;">Login</button>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">Login</button>
                 <a href="{% url 'signup' %}" class="btn btn-secondary">Signup</a>
             </div>
         </form>
     </div>
 </div>
-{% endblock %}
+{% endblock %}  
