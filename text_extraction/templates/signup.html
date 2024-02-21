@@ -1,15 +1,54 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="max-width: 300px;">  
-    <h2>Signup</h2>
-    <form method="post" style="width: auto;">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <div class="d-flex justify-content-between"> 
-            <button type="submit" class="btn btn-primary">Signup</button>
-            <a href="{% url 'login' %}" class="btn btn-secondary">Login</a>
-        </div>
-    </form>
+
+<style>
+    .signup-card {
+        margin: 2rem auto;
+        padding: 2rem;
+        width: 100%;
+        max-width: 500px;
+        background-color: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        transform: translateY(-2%);
+        transition: transform 0.3s ease;
+    }
+    .signup-card:hover {
+        transform: translateY(-5%) scale(1.02);
+    }
+    .form-control {
+        margin-bottom: 1rem;
+    }
+    .form-error {
+        color: #dc3545; 
+        font-size: 0.875em;
+    }
+</style>
+
+
+<div class="container">
+    <div class="signup-card">
+        <h2 class="text-center">Signup</h2>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+                <div class="form-group">
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small class="form-text text-muted">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <div class="form-error">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary">Signup</button>
+                <a href="{% url 'login' %}" class="btn btn-secondary">Login</a>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
