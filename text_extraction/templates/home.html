@@ -1,27 +1,61 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+<style>
+    .centered-form {
+        margin: 2rem auto;
+        width: 100%;
+        max-width: 500px;
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+    .centered-alert {
+        text-align: center;
+        width: auto;
+        margin-top: 20px;
+        padding: 5px;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    .text-area {
+        width: 80%;
+        margin-top: 20px;
+        resize: none;
+        border-radius: 0.5rem;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .btn-container {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+</style>
+
 <div class="d-flex justify-content-center">
-    <form action="{% url 'home' %}" method="post" enctype="multipart/form-data" class="form-inline my-2 my-lg-0">
+    <form action="{% url 'home' %}" method="post" enctype="multipart/form-data" class="centered-form">
         {% csrf_token %}
-        <input type="file" name="file" class="form-control mb-2 mr-sm-2" required>
-        <button type="submit" class="btn btn-primary mb-2">Upload</button>
+        <div class="form-group">
+            <input type="file" name="file" class="form-control mb-2" required>
+        </div>
+        <div class="btn-container">
+            <button type="submit" class="btn btn-primary mb-2">Upload</button>
+        </div>
     </form>
 </div>
-    {% if success_message %}
-    <div class="d-flex justify-content-center">
-        <div class="alert alert-success" role="alert" style="text-align: center; width: auto; padding: 5px;">
-            {{ success_message }}
-        </div>
+{% if success_message %}
+<div class="d-flex justify-content-center">
+    <div class="alert alert-success centered-alert" role="alert">
+        {{ success_message }}
     </div>
-    {% endif %}
-   
+</div>
+{% endif %}
 
-
-
-    {% if extracted_text %}
-    <div class="d-flex justify-content-center" style="margin-top: 20px;">
-        <textarea readonly class="form-control" rows="10" style="width: 80%; resize: none;">{{ extracted_text }}</textarea>
-    </div>
-    {% endif %}
+{% if extracted_text %}
+<div class="d-flex justify-content-center">
+    <textarea readonly class="form-control text-area" rows="10">{{ extracted_text }}</textarea>
+</div>
+{% endif %}
 {% endblock %}
