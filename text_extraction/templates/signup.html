@@ -8,28 +8,51 @@
         padding: 2rem;
         width: 100%;
         max-width: 500px;
-        background-color: #fff;
+        background-color: #f8f9fa; /* Change background color */
         border-radius: 0.5rem;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        transform: translateY(-2%);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); /* Lighten box shadow */
         transition: transform 0.3s ease;
     }
     .signup-card:hover {
-        transform: translateY(-5%) scale(1.02);
+        transform: scale(1.02);
     }
     .form-control {
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem; /* Increase margin bottom */
+        border-color: #ced4da; /* Lighten border color */
+        border-radius: 0.25rem; /* Adjust border radius */
+        padding: 0.75rem; /* Adjust padding */
     }
     .form-error {
         color: #dc3545; 
         font-size: 0.875em;
+    }
+    .btn {
+        padding: 0.75rem 1.5rem; /* Adjust button padding */
+        font-size: 1rem; /* Adjust font size */
+        border-radius: 0.25rem; /* Adjust border radius */
+    }
+    .btn-primary {
+        background-color: #007bff; /* Change primary button color */
+        border-color: #007bff; /* Change primary button border color */
+    }
+    .btn-primary:hover {
+        background-color: #0056b3; /* Change primary button hover color */
+        border-color: #0056b3; /* Change primary button hover border color */
+    }
+    .btn-secondary {
+        background-color: #6c757d; /* Change secondary button color */
+        border-color: #6c757d; /* Change secondary button border color */
+    }
+    .btn-secondary:hover {
+        background-color: #5a6268; /* Change secondary button hover color */
+        border-color: #545b62; /* Change secondary button hover border color */
     }
 </style>
 
 
 <div class="container">
     <div class="signup-card">
-        <h2 class="text-center">Signup</h2>
+        <h2 class="text-center mb-4">Signup</h2> <!-- Add margin bottom to heading -->
         <form method="post" novalidate>
             {% csrf_token %}
             {% for field in form %}
