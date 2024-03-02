@@ -77,8 +77,12 @@ WSGI_APPLICATION = 'text_extraction.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'docp',
+        'USER': 'postgres',
+        'PASSWORD': '14911912',
+        'HOST': 'localhost', 
+        'PORT': '5432', 
     }
 }
 
