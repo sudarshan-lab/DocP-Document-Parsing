@@ -2,9 +2,10 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, authenticate
 from .forms import SignUpForm
+from django.contrib.auth import logout
 from django.core.files.storage import FileSystemStorage
 from .models import UploadedFile
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 import os
 from .extract import extract_text_from_pdf
 
@@ -83,3 +84,22 @@ def view_history(request):
 #         messages.success(request, 'Your file has been uploaded successfully!')
 #         return redirect('upload')  # Redirect back to the same 'upload' page
 #     return render(request, 'upload.html')
+def create_contract(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            contract = Contract.objects.create(
+                name=data['name'], 
+                prompt=data.get('prompt', ''), 
+                description=data.get('description', '')
+            )
+            return JsonResponse({
+                "id": contract.id, 
+                "name": contract.name, 
+                "prompt": contract.prompt, 
+                "description": contract.description
+            }, status=201)
+        except (TypeError, ValueError, KeyError):
+            return JsonResponse({"error": "Bad request"}, status=400)
+    else:
+        return HttpResponse(status=405)
