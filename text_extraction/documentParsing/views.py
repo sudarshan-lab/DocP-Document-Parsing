@@ -6,7 +6,19 @@ from django.contrib.auth import logout
 from django.core.files.storage import FileSystemStorage
 from .models import UploadedFile
 from django.http import HttpResponse, JsonResponse
+from django.views.decorators.http import require_http_methods
+from rest_framework import viewsets
 import os
+from .models import Contract
+from .serializers import ContractSerializer
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.response import Response
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import views as auth_views
+from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
+import json
+from django.views.decorators.clickjacking import xframe_options_exempt
 from .extract import extract_text_from_pdf
 
 def py_path(win_path):
@@ -28,8 +40,17 @@ def py_path(win_path):
     path_py+='text_extraction'    
     return path_py
 
+@xframe_options_exempt
+@csrf_exempt
 def home(request):
     context = {}
+    if request.method == 'OPTIONS':
+        # Prepare response for OPTIONS request
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*' 
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'  
+        return response
     if request.method == 'POST' and request.FILES.get('file'):
         file = request.FILES['file']
         fs = FileSystemStorage()
@@ -49,7 +70,15 @@ def home(request):
             )
 
     return render(request, 'home.html', context)
+@csrf_exempt 
 def signup(request):
+    if request.method == 'OPTIONS':
+        # Prepare response for OPTIONS request
+        response = JsonResponse({'detail': 'Options request successful'})
+        response['Access-Control-Allow-Origin'] = '*' 
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'  
+        return response   
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
@@ -61,6 +90,7 @@ def signup(request):
     else:
         form = SignUpForm()
     return render(request, 'signup.html', {'form': form})
+@csrf_exempt
 def custom_logout(request):
     logout(request)
     return redirect('home')
@@ -84,8 +114,15 @@ def view_history(request):
 #         messages.success(request, 'Your file has been uploaded successfully!')
 #         return redirect('upload')  # Redirect back to the same 'upload' page
 #     return render(request, 'upload.html')
+@csrf_exempt
 def create_contract(request):
-    if request.method == 'POST':
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'X-CSRFToken, Content-Type'
+        return response
+    elif request.method == 'POST':
         try:
             data = json.loads(request.body.decode('utf-8'))
             contract = Contract.objects.create(
