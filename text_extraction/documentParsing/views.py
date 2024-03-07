@@ -20,6 +20,10 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 from django.views.decorators.clickjacking import xframe_options_exempt
 from .extract import extract_text_from_pdf
+@ensure_csrf_cookie
+def set_csrf_token(request):
+    return JsonResponse({'detail': 'CSRF cookie set'})
+from rest_framework.decorators import api_view
 
 def py_path(win_path):
     python_path = "" # The result of this script.
@@ -56,18 +60,31 @@ def home(request):
         fs = FileSystemStorage()
         filename = fs.save(file.name, file)
         uploaded_file_url = fs.url(filename)
+        contract_id = request.POST.get('contract_id')
+        print(contract_id)
+        contract = None
+        if contract_id:
+            try:
+                contract = Contract.objects.get(id=contract_id)
+            except Contract.DoesNotExist:
+                context['error'] = 'Contract not found'
+                return JsonResponse(context, status=400)
         cur_dir=py_path(os.path.dirname(os.getcwd()))
         full_path=cur_dir+'/media/'+filename
         context['success_message'] = 'Your file has been uploaded successfully!'
-        text=extract_text_from_pdf(full_path)
+        extract_text_from_pdf(full_path)
+        text=extract_results(contract.prompt)
         context['uploaded_file_url']=uploaded_file_url
         context['extracted_text']=text
         if request.user.is_authenticated:
+            print("user is authenticated")
             UploadedFile.objects.create(
                     user=request.user,
                     file=file,
-                    extracted_text=text
+                    extracted_text=text,
+                    contract=contract
             )
+        return JsonResponse(context)    
 
     return render(request, 'home.html', context)
 @csrf_exempt 
