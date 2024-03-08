@@ -157,3 +157,31 @@ def create_contract(request):
             return JsonResponse({"error": "Bad request"}, status=400)
     else:
         return HttpResponse(status=405)
+
+@csrf_exempt
+def update_contract(request, contract_id):
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'X-CSRFToken, Content-Type'
+        return response
+    elif request.method == 'PUT':
+        try:
+            print('put method called')
+            data = json.loads(request.body)
+            print(data)
+            print(type(contract_id),contract_id)
+            contract = Contract.objects.get(id=contract_id)
+
+            contract.name = data.get('name', contract.name)
+            contract.prompt = data.get('prompt', contract.prompt)
+            contract.description = data.get('description', contract.description)
+            contract.save()
+            return JsonResponse({"message": "Contract updated successfully"}, status=200)
+        except ObjectDoesNotExist:
+            return JsonResponse({"error": "Contract not found"}, status=404)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Bad request"}, status=400)
+    else:
+        return HttpResponse(status=405)     
