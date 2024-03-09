@@ -185,3 +185,22 @@ def update_contract(request, contract_id):
             return JsonResponse({"error": "Bad request"}, status=400)
     else:
         return HttpResponse(status=405)     
+@csrf_exempt
+def delete_contract(request, contract_id):
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'X-CSRFToken, Content-Type'
+        return response
+    elif request.method == 'DELETE':
+        try:
+            contract = Contract.objects.get(id=contract_id)
+            contract.delete()
+            return HttpResponse(status=204)
+        except ObjectDoesNotExist:
+            return JsonResponse({"error": "Contract not found"}, status=404)
+    else:
+        return HttpResponse(status=405)    
+
+
