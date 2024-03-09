@@ -20,6 +20,21 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 from django.views.decorators.clickjacking import xframe_options_exempt
 from .extract import extract_text_from_pdf
+@csrf_exempt
+def list_contracts(request):
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'  # Adjust as necessary
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'  # Specify allowed headers
+        return response
+    print("contracts list called")
+    if request.method == 'GET':
+        contracts = Contract.objects.all()
+        contracts_list = [{'id': contract.id, 'name': contract.name, 'prompt': contract.prompt, 'description': contract.description} for contract in contracts]
+        return JsonResponse({'contracts': contracts_list})
+    else:
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
 @ensure_csrf_cookie
 def set_csrf_token(request):
     return JsonResponse({'detail': 'CSRF cookie set'})
