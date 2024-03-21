@@ -1,17 +1,12 @@
 import numpy as np 
 import pandas as pd 
 import cv2
-import PIL
-from PIL import Image
 import pytesseract
 import spacy
 import matplotlib.pyplot as plt
 from io import BytesIO
 from pdf2image import convert_from_path
-
-from pdf2image import convert_from_path
 from PIL import Image, ImageEnhance
-import cv2
 import numpy as np
 import fitz
 import PyPDF2
