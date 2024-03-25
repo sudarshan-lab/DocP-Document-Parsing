@@ -40,7 +40,7 @@ html, body {
     display: flex;
 }
 .AdminPage nav li button {
-    background-color: #dc3545;
+    background-color: #dc3546;
     margin-left: 10px;
 }
 
@@ -56,7 +56,7 @@ html, body {
     border: none;
     padding: 4px 10px;
 
-    background-color: #dc3545;
+    background-color: #dc3546;
     border-radius: 2px;
     cursor: pointer;
     font-size: 16px;
@@ -91,7 +91,7 @@ html, body {
 }
 
 .AdminPage .contract-manage-container button:hover {
-    background-color: #0056b3;
+    background-color: #0056b2;
 }
 
 .AdminPage .contract-manage-container .contracts-list {
@@ -110,7 +110,7 @@ html, body {
 }
 
 .AdminPage .contract-manage-container .contracts-list li button {
-    background-color: #dc3545;
+    background-color: #dc3546;
     margin-left: 10px; 
 }
 
