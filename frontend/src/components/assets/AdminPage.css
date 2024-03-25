@@ -1,0 +1,219 @@
+html, body {
+    min-height: 100%;
+    overflow-y: auto;
+}
+.AdminPage {
+    font-family: 'Arial', sans-serif;
+    margin: 0px;
+    min-height: 100vh;
+    overflow-y: auto;
+}
+.logo {
+    font-size: 2rem;
+    font-weight: bold; 
+    color: #f8f9fa;
+    text-shadow: 1px 1px 2px #000;
+    margin-bottom: 20px;
+    display: inline-block; 
+    font-family: 'Arial', sans-serif;
+}
+.logo-admin {
+    font-size: 1rem;
+    font-weight: normal;
+    color: #adb5bd;
+    vertical-align: super;
+    margin-left: 10px; 
+    text-transform: uppercase; 
+}
+
+.AdminPage nav {
+    background-color: #343a40;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.AdminPage nav ul {
+    list-style: none;
+    display: flex;
+}
+.AdminPage nav li button {
+    background-color: #dc3545;
+    margin-left: 10px;
+}
+
+.AdminPage nav ul li {
+    margin-left: 20px;
+}
+
+.AdminPage nav ul li a,
+.AdminPage nav ul li button {
+    color: rgb(236, 235, 235);
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 4px 10px;
+
+    background-color: #dc3545;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 16px;
+}
+.AdminPage .contract-manage-container h1 {
+    margin-top: 20px;
+    color: #333;
+}
+
+.AdminPage .contract-manage-container h2 {
+    margin-top: 20px;
+    color: #666;
+}
+
+.AdminPage .contract-manage-container input[type="text"],
+.AdminPage .contract-manage-container textarea {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.AdminPage .contract-manage-container button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+.AdminPage .contract-manage-container button:hover {
+    background-color: #0056b3;
+}
+
+.AdminPage .contract-manage-container .contracts-list {
+    list-style: none;
+    padding: 0;
+}
+
+.AdminPage .contract-manage-container .contracts-list li {
+    background-color: #f8f9fa;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.AdminPage .contract-manage-container .contracts-list li button {
+    background-color: #dc3545;
+    margin-left: 10px; 
+}
+
+.AdminPage .contract-manage-container .contracts-list li button:first-child {
+    background-color: #ffc107; 
+}
+.AdminPage .contract-manage-container {
+    margin: 20px;
+    padding: 20px;
+    background-color: #f4f4f4; 
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
+}
+
+.AdminPage .contract-manage-container h1, 
+.AdminPage .contract-manage-container h2 {
+    color: #333; 
+}
+
+.AdminPage .contract-manage-container input[type="text"],
+.AdminPage .contract-manage-container textarea {
+    width: calc(100% - 22px); 
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 2px solid #ccc; 
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+.AdminPage .contract-manage-container button {
+    background-color: #007bff;
+    color: white;
+    padding: 12px 20px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s; 
+}
+
+.AdminPage .contract-manage-container button:hover {
+    background-color: #0056b3;
+}
+
+.AdminPage .contract-manage-container .contracts-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 20px; 
+}
+
+.AdminPage .contract-manage-container .contracts-list li {
+    background-color: #ffffff;
+    margin-bottom: 15px;
+    padding: 15px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); 
+    transition: transform 0.2s;
+}
+
+.AdminPage .contract-manage-container .contracts-list li:hover {
+    transform: translateY(-3px); 
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
+}
+
+.AdminPage .contract-manage-container .contracts-list li button {
+    padding: 8px 15px;
+    margin-left: 10px;
+    font-size: 14px; 
+    border-radius: 4px;  
+}
+
+.AdminPage .contract-manage-container .contracts-list li button:first-child {
+    background-color: #ffc107; 
+}
+
+.AdminPage .contract-manage-container .contracts-list li button:last-child {
+    background-color: #dc3545; 
+}
+
+.AdminPage .contracts-list li .button-container {
+    display: flex;
+    flex-direction: column; 
+    align-items: center; 
+}
+.AdminPage .contracts-list li .button-container button {
+    width: 100px;
+    margin: 5px 0; 
+    background-color: #dc3545;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s; 
+}
+
+.AdminPage .contracts-list li .button-container button:first-child {
+    background-color: #ffc107;
+}
+
+.AdminPage .contracts-list li .button-container button:hover {
+    opacity: 0.9; 
+}
