@@ -40,6 +40,41 @@ def set_csrf_token(request):
     return JsonResponse({'detail': 'CSRF cookie set'})
 from rest_framework.decorators import api_view
 
+@api_view(['GET'])
+def auth_status(request):
+    """
+    View to check user's authentication status and username.
+    """
+    # return JsonResponse({
+    #     'isAuthenticated': False,
+    #     'username': 'DebugUser'
+    # })
+    if request.method == 'OPTIONS':
+        # Prepare response for OPTIONS request
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'  # Adjust as necessary
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'  # Specify allowed headers
+        return response
+    print("auth_status")
+    if request.method == 'GET':
+        if request.user.is_authenticated:
+            # User is authenticated
+            print(JsonResponse({
+                'isAuthenticated': True,
+                'username': request.user.username  # Or any other user attribute
+            }))
+            return JsonResponse({
+                'isAuthenticated': True,
+                'username': request.user.username  # Or any other user attribute
+            })
+        else:
+            # User is not authenticated
+            return JsonResponse({'isAuthenticated': False,'username': 'Anonymous'})
+    
+
+
+
 def py_path(win_path):
     python_path = "" # The result of this script.
     # Convert to ASCII list
@@ -112,26 +147,35 @@ def signup(request):
         response['Access-Control-Allow-Headers'] = 'Content-Type'  
         return response   
     if request.method == 'POST':
-        form = SignUpForm(request.POST)
+        # print("Received data:", request.body.decode('utf-8'))
+       
+        data = json.loads(request.body.decode('utf-8'))
+        form = SignUpForm(data)
         if form.is_valid():
             user = form.save()
             # Log the user in after signing up
             login(request, user)
-            # Redirect to home or any other page
-            return redirect('home')
+            return JsonResponse({'detail': 'Successfully signed up and logged in.'}, status=201)
+        else:
+            print(form.errors)  
+            return JsonResponse(form.errors, status=400)
     else:
-        form = SignUpForm()
-    return render(request, 'signup.html', {'form': form})
+        return JsonResponse({'detail': 'Method not allowed'}, status=405)
 @csrf_exempt
 def custom_logout(request):
-    logout(request)
-    return redirect('home')
-
-
-@login_required
-def view_history(request):
-    uploaded_files = UploadedFile.objects.filter(user=request.user).order_by('-uploaded_at')
-    return render(request, 'history.html', {'uploaded_files': uploaded_files})
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'  
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'  
+        return response
+    elif request.method == 'POST':
+            print("key",os.environ.get("OPENAI_API_KEY"))
+            
+            logout(request)  
+            return JsonResponse({'status': 'success', 'message': 'Logged out successfully'})  # Send a success response
+    else:
+        return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
 
 
 

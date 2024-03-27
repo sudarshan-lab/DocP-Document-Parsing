@@ -216,37 +216,16 @@ def extract_results(prompt):
         lines=file.read()   
     with open('tables.csv', "r") as file:
         table_csv=file.read()    
-    # with open("C:\\Users\\SESA737860\\Desktop\\transcript and passport\\prompt_passport.txt","r") as f:
-    #     content=f.read()
 
-    # prompt=content.format(input1=input1, input2=input2, input3=input3, input4=input4, input5= input5, text=lines, content=table_csv)
-    # input1="Name"
-    # input2="Branch"
-    # input3="course code"
-    # input4="name of the course"
-    # input5="grade"
     prompt = f"""
-            Extract the following information from the provided sources and format the output in JSON:
+            Use the following data
 
-            This is what you need to extract from the transcript:
-            {prompt}
+            Raw Text data: ${lines}
 
-            The sources available for extraction are a raw text file containing the extracted text from the transcript and a CSV file containing all tables from the transcript. 
-            The CSV file is having more accurate information, so compare the extractions from both raw text data and CSV Table data, CSV table data must be present.
+            CSV Table data: ${table_csv}
 
-            Raw Text data: {lines}
-
-            Extract the information from the raw text file. Search for patterns or keywords that indicate the relevant details such as name, branch, course code, and GPA. If necessary, use regular expressions or specific keywords to identify the required information.
-
-            CSV Table data: {table_csv}
-
-            Extract the information from the CSV file. Look for columns or fields that correspond to the requested information, such as student names, course codes, GPAs, etc. Match the values with the user-provided inputs to ensure accuracy.
-
-            Output Format:
-
-            Format the extracted information into a JSON object as below:
-
-            {prompt}
+            Extract the data as per the following requirements and represent in strictly level-1 JSON format:
+            ${prompt}
 
             If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
             """ 
@@ -266,3 +245,54 @@ def extract_results(prompt):
         )
     print(chat_completion.choices[0].message.content)
     return chat_completion.choices[0].message.content
+
+
+def extract_text_from_pdf(pdf_file):
+    global table_csv
+    global lines
+    document_name=pdf_file
+    file=pdf_file.split('/')[-1]
+    s3_bucket_name="textextractbucket17"
+    s3_client = boto3.client('s3',aws_access_key_id='AKIA4MTWLND6TG4GPBYZ',aws_secret_access_key='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')
+    try:
+        response = s3_client.upload_file(Filename=document_name, Bucket=s3_bucket_name, Key=file)
+    except ClientError as e:
+        print(e)
+    
+    client = boto3.client('textract', region_name="eu-west-1",aws_access_key_id='AKIA4MTWLND6TG4GPBYZ',aws_secret_access_key='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')
+    
+    job_id = start_job(client, s3_bucket_name, file)
+    print("Started job with id: {}".format(job_id))
+    if is_job_complete(client, job_id):
+        response = get_job_results(client, job_id)
+
+    if os.path.exists('tables.csv'):
+        os.remove('tables.csv')
+    if os.path.exists('temp.txt'):
+        os.remove('temp.txt')    
+
+    for result_page in response:
+        blocks = result_page['Blocks']
+        table_csv = get_table_csv_results(blocks)
+        output_file = "tables" + ".csv"
+        with open(output_file, "at") as fout:
+            fout.write(table_csv)
+        print('Detected Document Text')
+        print('Pages: {}'.format(result_page['DocumentMetadata']['Pages']))
+        print('OUTPUT TO CSV FILE: ', output_file)
+
+        for block in blocks:
+            DisplayBlockInfo(block)
+            print()
+            print()
+    
+    lines=[]
+    for result_page in response:
+        for item in result_page["Blocks"]:
+            if item["BlockType"] == "LINE":
+                print(item["Text"])
+                lines.append(item["Text"])
+    lines=str(lines)
+    with open('temp.txt', "w") as file:
+            file.write(lines)
+
