@@ -224,10 +224,12 @@ def extract_results(prompt):
 
             CSV Table data: ${table_csv}
 
-            Extract the data as per the following requirements and represent in strictly level-1 JSON format:
+            Mainly focus on CSV table since it contain more information and use raw text data and csv table data in parallel and extract the data
+
+            Extract the data as per the following requirements and represent the data in strictly level-1 JSON format:
             ${prompt}
 
-            If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
+            If any information cannot be found or extracted from either source, return null in the place of missing values in JSON output.
             """ 
 
 
