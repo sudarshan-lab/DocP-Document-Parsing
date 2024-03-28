@@ -44,14 +44,7 @@ def get_table_csv_results(blocks):
     for index, table in enumerate(table_blocks):
         csv += generate_table_csv(table, blocks_map, index + 1)
         csv += '\n\n'
-        # In order to generate separate CSV file for every table, uncomment code below
-        #inner_csv = ''
-        #inner_csv += generate_table_csv(table, blocks_map, index + 1)
-        #inner_csv += '\n\n'
-        #output_file = file_name + "___" + str(index) + ".csv"
-        # replace content
-        #with open(output_file, "at") as fout:
-        #    fout.write(inner_csv)
+
 
     return csv
 
@@ -83,10 +76,8 @@ def get_rows_columns_map(table_result, blocks_map):
                         row_index = cell['RowIndex']
                         col_index = cell['ColumnIndex']
                         if row_index not in rows:
-                            # create new row
                             rows[row_index] = {}
 
-                        # get the text value
                         rows[row_index][col_index] = get_text(cell, blocks_map)
                 except KeyError:
                     print("Error extracting Table data - {}:".format(KeyError))
