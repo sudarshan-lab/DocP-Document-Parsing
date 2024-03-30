@@ -190,6 +190,33 @@ def custom_logout(request):
 #         messages.success(request, 'Your file has been uploaded successfully!')
 #         return redirect('upload')  # Redirect back to the same 'upload' page
 #     return render(request, 'upload.html')
+
+
+def view_history(request):
+    if request.method == 'OPTIONS':
+        # Prepare response for OPTIONS request
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'  
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type' 
+        return response
+
+    elif request.method == 'GET':
+        if not request.user.is_authenticated:
+            return JsonResponse({'detail': 'Unauthorized'}, status=401)
+
+        uploaded_files = UploadedFile.objects.filter(user=request.user).order_by('-uploaded_at')
+        files_list = [{
+            'id': file.id,
+            'filename': file.file.name,
+            'extracted_text': file.extracted_text,
+            'upload_date': file.uploaded_at.strftime("%Y-%m-%d %H:%M:%S"),
+            'file_url': request.build_absolute_uri(file.file.url)
+        } for file in uploaded_files]
+
+        return JsonResponse({'uploaded_files': files_list})
+
+
 @csrf_exempt
 def create_contract(request):
     if request.method == 'OPTIONS':
