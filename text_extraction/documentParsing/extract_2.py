@@ -34,8 +34,10 @@ def get_table_csv_results(blocks):
     table_blocks = []
     for block in blocks:
         blocks_map[block['Id']] = block
-        if block['BlockType'] == "TABLE":
+        if block['BlockType'] == "TABLE" and block['BlockType'] != None:
             table_blocks.append(block)
+        else:
+            return
 
     if len(table_blocks) <= 0:
         return "<b> NO Table FOUND </b>"
@@ -68,7 +70,7 @@ def generate_table_csv(table_result, blocks_map, table_index):
 def get_rows_columns_map(table_result, blocks_map):
     rows = {}
     for relationship in table_result['Relationships']:
-        if relationship['Type'] == 'CHILD':
+        if relationship['Type'] == 'CHILD' and relationship['Type'] != None:
             for child_id in relationship['Ids']:
                 try:
                     cell = blocks_map[child_id]
@@ -82,6 +84,8 @@ def get_rows_columns_map(table_result, blocks_map):
                 except KeyError:
                     print("Error extracting Table data - {}:".format(KeyError))
                     pass
+        else:
+            return
     return rows
 
 def get_text(result, blocks_map):
@@ -165,10 +169,12 @@ def extract_text_from_pdf(pdf_file):
     if is_job_complete(client, job_id):
         response = get_job_results(client, job_id)
 
-    if os.path.exists('tables.csv'):
-        os.remove('tables.csv')
+    
     if os.path.exists('temp.txt'):
         os.remove('temp.txt')    
+
+    if os.path.exists('table.csv'):
+        os.remove('table.csv')
 
     for result_page in response:
         blocks = result_page['Blocks']
