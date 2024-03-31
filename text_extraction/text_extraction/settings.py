@@ -32,6 +32,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -40,8 +41,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'textract',
 ]
+CORS_ALLOWED_ORIGINS=[
+    'http://localhost:5173',
+    ]
 
 MIDDLEWARE = [
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -50,9 +55,16 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',  
+    'http://127.0.0.1:5173',  
 
+]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = ['http://localhost:5173']
+CSRF_TRUSTED_ORIGINS = ['http://localhost:5173']
 ROOT_URLCONF = 'text_extraction.urls'
-
+CSRF_COOKIE_HTTPONLY = False
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -126,6 +138,8 @@ MEDIA_URL = '/media/'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 STATIC_ROOT = os.path.join(BASE_DIR, "static")
+CORS_ALLOW_ALL_ORIGINS = True
+CSRF_COOKIE_SECURE = False
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field

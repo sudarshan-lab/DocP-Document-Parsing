@@ -16,7 +16,7 @@ const useStyles = styled((theme) => ({
     },
     loginCard: {
         marginLeft: theme.spacing(6), 
-        padding: theme.spacing(2.5),
+        padding: theme.spacing(2),
         background: 'rgba(255, 255, 255, 0.8)',
         boxShadow: theme.shadows[5],
         borderRadius: theme.shape.borderRadius,
