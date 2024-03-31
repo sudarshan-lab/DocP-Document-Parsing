@@ -8,9 +8,18 @@ from .models import UploadedFile
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets
+from django.contrib import messages
+import boto3
+from django.core.exceptions import ObjectDoesNotExist
+from botocore.exceptions import ClientError
+import time
+from dotenv import load_dotenv
+load_dotenv()
+from django.conf import settings
 import os
 from .models import Contract
 from .serializers import ContractSerializer
+from pathlib import PurePosixPath
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
@@ -19,7 +28,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 from django.views.decorators.clickjacking import xframe_options_exempt
-from .extract import extract_text_from_pdf
+from .extract import extract_text_from_pdf,extract_results
 @csrf_exempt
 def list_contracts(request):
     if request.method == 'OPTIONS':
@@ -137,7 +146,45 @@ def home(request):
         return JsonResponse(context)    
 
     return render(request, 'home.html', context)
-@csrf_exempt 
+
+def view_history(request):
+    if request.method == 'OPTIONS':
+        # Prepare response for OPTIONS request
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'  
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type' 
+        return response
+
+    elif request.method == 'GET':
+        if not request.user.is_authenticated:
+            return JsonResponse({'detail': 'Unauthorized'}, status=401)
+
+        uploaded_files = UploadedFile.objects.filter(user=request.user).order_by('-uploaded_at')
+        files_list = [{
+            'id': file.id,
+            'filename': file.file.name,
+            'extracted_text': file.extracted_text,
+            'upload_date': file.uploaded_at.strftime("%Y-%m-%d %H:%M:%S"),
+            'file_url': request.build_absolute_uri(file.file.url)
+        } for file in uploaded_files]
+
+        return JsonResponse({'uploaded_files': files_list})
+
+# @csrf_exempt
+# def signup(request):
+#     if request.method == 'POST':
+#         form = SignUpForm(request.POST)
+#         if form.is_valid():
+#             user = form.save()
+#             # Log the user in after signing up
+#             login(request, user)
+#             # Redirect to home or any other page
+#             return redirect('home')
+#     else:
+#         form = SignUpForm()
+#     return render(request, 'signup.html', {'form': form})
+@csrf_exempt  # Note: Better to handle CSRF in AJAX calls than disable it
 def signup(request):
     if request.method == 'OPTIONS':
         # Prepare response for OPTIONS request
@@ -190,31 +237,75 @@ def custom_logout(request):
 #         messages.success(request, 'Your file has been uploaded successfully!')
 #         return redirect('upload')  # Redirect back to the same 'upload' page
 #     return render(request, 'upload.html')
-
-
-def view_history(request):
+@csrf_exempt
+def exempted_login_view(request, *args, **kwargs):
     if request.method == 'OPTIONS':
-        # Prepare response for OPTIONS request
         response = HttpResponse()
-        response['Access-Control-Allow-Origin'] = '*'  
-        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type' 
-        return response
+        response['Access-Control-Allow-Origin'] = 'http://localhost:5173' 
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'X-CSRFToken, Content-Type'  
+        return response    
+    elif request.method == 'POST':
+        # print("post request sent")
 
-    elif request.method == 'GET':
-        if not request.user.is_authenticated:
-            return JsonResponse({'detail': 'Unauthorized'}, status=401)
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            username = data.get('username')
+            password = data.get('password')
+            print(username)
+            print(password)
+            
+            user = authenticate(request, username=username, password=password)
+            print("Authenticated user:", user)
+            if user is not None:
+                login(request, user)
+                return JsonResponse({"detail": "Login successful."}, status=200)
+            else:
+                return JsonResponse({"detail": "Invalid credentials."}, status=401)
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "Invalid JSON."}, status=400)
+    else:
+        return HttpResponse(status=405)
 
-        uploaded_files = UploadedFile.objects.filter(user=request.user).order_by('-uploaded_at')
-        files_list = [{
-            'id': file.id,
-            'filename': file.file.name,
-            'extracted_text': file.extracted_text,
-            'upload_date': file.uploaded_at.strftime("%Y-%m-%d %H:%M:%S"),
-            'file_url': request.build_absolute_uri(file.file.url)
-        } for file in uploaded_files]
+@csrf_exempt
+def exempted_admin_login_view(request, *args, **kwargs):
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = 'http://localhost:5173' 
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'X-CSRFToken, Content-Type'  
+        return response    
+    elif request.method == 'POST':
+        # print("post request sent")
 
-        return JsonResponse({'uploaded_files': files_list})
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            username = data.get('username')
+            password = data.get('password')
+            print(username)
+            print(password)
+            
+            user = authenticate(request, username=username, password=password)
+            print("Authenticated user:", user)
+            if user is not None:
+                login(request, user)
+                is_admin = user.is_staff
+                if is_admin:
+                    print("-------------------------------------------user is staff--------------------------------")
+                return JsonResponse({"detail": "Login successful.","is_admin": is_admin}, status=200)
+            else:
+                return JsonResponse({"detail": "Invalid credentials."}, status=401)
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "Invalid JSON."}, status=400)
+    else:
+        return HttpResponse(status=405)
+
+class ContractViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Contract.objects.all()
+    serializer_class = ContractSerializer    
+
+
+
 
 
 @csrf_exempt
