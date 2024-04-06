@@ -2,6 +2,7 @@ const fs = require('fs');
 const express = require('express');
 const cors = require("cors");
 const dotenv = require('dotenv');
+const multer = require('multer');
 const app = express();
 app.use(express.json());
 dotenv.config();
@@ -15,6 +16,9 @@ const storage = multer.diskStorage({
       cb(null, file.originalname) // use the original file name for storing
   }
 });
+
+const upload = multer({ storage: storage });
+
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY,
