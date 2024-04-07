@@ -7,6 +7,11 @@ const cors = require("cors");
 const express = require('express');
 const multer = require('multer');
 const db = require('./connection');
+
+const Contract = require('./contractModel');
+const ExtractedContract = require('./ExtractedContractModel')
+const userModel = require('./userModel');
+
 const app = express();
 app.use(express.json());
 dotenv.config();
@@ -238,7 +243,9 @@ async function extract_text_from_pdf(pdfFile) {
     lines = lines.join('\n');
     fs.writeFileSync('temp.txt', lines);
 }
-const promp = "Please analyze the following high school transcript text and the associated table data to extract the student's name, date of birth, GPA, and course grades with credits. Format the extracted information as JSON key-value pairs. Ensure that the extracted data is accurate and neatly organized for each course listed";
+//const promp = "Please analyze the following high school transcript text and the associated table data to extract the student's name, date of birth, GPA, and course grades with credits. Format the extracted information as JSON key-value pairs. Ensure that the extracted data is accurate and neatly organized for each course listed";
+
+
 const openai = new OpenAI({
   apiKey:"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"
 });
@@ -334,11 +341,21 @@ const S3Upload = async (file,fileContent) => {
       const filePath = req.file.path;
       const fileContent = fs.readFileSync(filePath);
       const {contractId,userId} = req.body;
+      const contr = await Contract.findById(contractId);
       const fC = await S3Upload(req.file,fileContent);
       const fileS3Url = fC.Location;
+      console.log(contr.prompt);
       const result = await extract_text_from_pdf(filePath); // Call function to extract text from PDF
-      const extractedData = await extract_results(prompt);
-      res.status(201).json({message:"uploaded sucessfulluy"}); 
+      const extractedData = await extract_results(contr.prompt);
+      const extractedContractData = new ExtractedContract({
+        data:extractedData,
+        contractId:contractId,
+        UserId:userId,
+        fileS3Url:fileS3Url,
+        fileName:req.file.originalname,
+      });
+      await extractedContractData.save();
+      res.status(201).json({message:"uploaded sucessfulluy",extractedData:extractedContractData}); 
     }
     catch (error) {
       console.error(error);
