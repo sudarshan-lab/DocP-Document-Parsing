@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require("cors");
 const dotenv = require('dotenv');
 const multer = require('multer');
+
+const userModel = require('./userModel');
 const app = express();
 app.use(express.json());
 dotenv.config();
