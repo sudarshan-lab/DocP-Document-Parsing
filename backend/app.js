@@ -318,6 +318,17 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+  app.post('/api/contract', async (req, res) => {
+    try {
+        const { name, prompt, description } = req.body;
+        const newContract = new Contract({ name, prompt, description });
+        await newContract.save();
+        res.json({ message: 'Contract created successfully', newContract });
+    } catch (error) {
+        console.error('Error adding contract item:', error.message);
+        res.status(500).json({ error: 'Failed to add contract item' });
+    }
+});
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY,
