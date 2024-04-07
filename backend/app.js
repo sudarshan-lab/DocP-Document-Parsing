@@ -1,10 +1,12 @@
 const fs = require('fs');
-const express = require('express');
-const cors = require("cors");
+const AWS = require('aws-sdk');
+const OpenAI = require("openai");
 const dotenv = require('dotenv');
+const axios = require('axios');
+const cors = require("cors");
+const express = require('express');
 const multer = require('multer');
-
-const userModel = require('./userModel');
+const db = require('./connection');
 const app = express();
 app.use(express.json());
 dotenv.config();
@@ -128,6 +130,174 @@ function getText(result, blocksMap) {
   return text;
 }
 
+// Start document analysis job
+function startJob(client, s3BucketName, objectName) {
+    return new Promise((resolve, reject) => {
+        client.startDocumentAnalysis({
+            DocumentLocation: { S3Object: { Bucket: s3BucketName, Name: objectName } },
+            FeatureTypes: ["TABLES"]
+        }, (err, data) => {
+            if (err) reject(err);
+            else resolve(data.JobId);
+        });
+    });
+}
+
+// Check if document analysis job is complete
+function isJobComplete(client, jobId) {
+    return new Promise((resolve, reject) => {
+        function checkJobStatus() {
+            client.getDocumentAnalysis({ JobId: jobId }, (err, data) => {
+                if (err) reject(err);
+                else {
+                    console.log("Job status: " + data.JobStatus);
+                    if (data.JobStatus === "IN_PROGRESS") {
+                        setTimeout(checkJobStatus, 1000);
+                    } else {
+                        resolve(data);
+                    }
+                }
+            });
+        }
+        checkJobStatus();
+    });
+}
+
+// Get document analysis job results
+function getJobResults(client, jobId) {
+    return new Promise((resolve, reject) => {
+        const pages = [];
+        function getResults(nextToken) {
+            client.getDocumentAnalysis({ JobId: jobId, NextToken: nextToken }, (err, data) => {
+                if (err) reject(err);
+                else {
+                    pages.push(data);
+                    console.log("Resultset page received: " + pages.length);
+                    if (data.NextToken) {
+                        setTimeout(() => getResults(data.NextToken), 1000);
+                    } else {
+                        resolve(pages);
+                    }
+                }
+            });
+        }
+        getResults(null);
+    });
+}
+
+async function extract_text_from_pdf(pdfFile) {
+    const s3BucketName = "textextractbucket17";
+    const s3Client = new AWS.S3({
+        accessKeyId: "AKIA4MTWLND6TG4GPBYZ",
+        secretAccessKey: "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"
+    });
+    try {
+        await s3Client.upload({ Bucket: s3BucketName, Key: pdfFile, Body: fs.createReadStream(pdfFile) }).promise();
+    } catch (error) {
+        console.error("Error uploading file to S3:", error);
+        return;
+    }
+
+    const textractClient = new AWS.Textract({
+        region: "eu-west-1",
+        accessKeyId: "AKIA4MTWLND6TG4GPBYZ",
+        secretAccessKey: "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"
+    });
+
+    const jobId = await startJob(textractClient, s3BucketName, pdfFile);
+    console.log("Started job with id: " + jobId);
+    const jobResult = await isJobComplete(textractClient, jobId);
+    const response = await getJobResults(textractClient, jobId);
+
+    if (fs.existsSync('tables.csv')) fs.unlinkSync('tables.csv');
+    if (fs.existsSync('temp.txt')) fs.unlinkSync('temp.txt');
+
+    for (const resultPage of response) {
+        const blocks = resultPage.Blocks;
+        const tableCsv = getTableCsvResults(blocks);
+        const outputFileName = "tables.csv";
+        fs.appendFileSync(outputFileName, tableCsv);
+        //console.log('Detected Document Text');
+        //console.log('Pages: ' + resultPage.DocumentMetadata.Pages);
+        //console.log('OUTPUT TO CSV FILE: ' + outputFileName);
+        for (const block of blocks) {
+            displayBlockInfo(block);
+            //console.log();
+        }
+    }
+
+    lines = [];
+    for (const resultPage of response) {
+        for (const item of resultPage.Blocks) {
+            if (item.BlockType === "LINE") {
+                //console.log(item.Text);
+                lines.push(item.Text);
+            }
+        }
+    }
+    lines = lines.join('\n');
+    fs.writeFileSync('temp.txt', lines);
+}
+const promp = "Please analyze the following high school transcript text and the associated table data to extract the student's name, date of birth, GPA, and course grades with credits. Format the extracted information as JSON key-value pairs. Ensure that the extracted data is accurate and neatly organized for each course listed";
+const openai = new OpenAI({
+  apiKey:"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"
+});
+// Function to make a request to OpenAI API
+async function extract_results(prompt) {
+
+  const lines = fs.readFileSync('temp.txt', 'utf8');
+  const tableCsv = fs.readFileSync('tables.csv', 'utf8');
+
+  // Format the prompt
+  const formattedPrompt = `
+Extract the following information from the provided sources and format the output in JSON:
+
+This is what you need to extract from the transcript:
+${prompt}
+
+The sources available for extraction are a raw text file containing the extracted text from the transcript and a CSV file containing all tables from the transcript. 
+The CSV file is having more accurate information, so compare the extractions from both raw text data and CSV Table data, CSV table data must be present.
+
+Raw Text data: ${lines}
+
+Extract the information from the raw text file. Search for patterns or keywords that indicate the relevant details such as name, branch, course code, and GPA. If necessary, use regular expressions or specific keywords to identify the required information.
+
+CSV Table data: ${tableCsv}
+
+Extract the information from the CSV file. Look for columns or fields that correspond to the requested information, such as student names, course codes, GPAs, etc. Match the values with the user-provided inputs to ensure accuracy.
+
+Output Format:
+
+Format the extracted information into a JSON object as below:
+
+${prompt}
+
+If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
+`;
+
+
+  console.log(formattedPrompt)
+  try {
+    const response = await openai.chat.completions.create({
+      messages:[
+                
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": formattedPrompt},
+    
+],
+      model: "gpt-3.5-turbo-0125",
+      max_tokens: 2048,
+      temperature: 0,
+      response_format:{"type": "json_object"},
+    });
+  
+    const res = response.choices[0].message.content;
+    return res;
+  } catch (error) {
+    console.error('Error:', error);
+    return null;
+  }
+}
 
 
 const storage = multer.diskStorage({
@@ -166,6 +336,8 @@ const S3Upload = async (file,fileContent) => {
       const {contractId,userId} = req.body;
       const fC = await S3Upload(req.file,fileContent);
       const fileS3Url = fC.Location;
+      const result = await extract_text_from_pdf(filePath); // Call function to extract text from PDF
+      const extractedData = await extract_results(prompt);
       res.status(201).json({message:"uploaded sucessfulluy"}); 
     }
     catch (error) {
