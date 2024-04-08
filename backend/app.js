@@ -362,6 +362,15 @@ const upload = multer({ storage: storage });
       res.status(500).json({ message: 'Internal server error' });
     }
   });
+  app.get('/api/allData', async (req, res) => {
+    try {
+      const items = await ExtractedContract.find().populate({path: 'UserId contractId'});
+      res.json(items);
+    } catch (error) {
+      console.error('Error fetching user history:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
 
   const s3 = new AWS.S3({
     accessKeyId: process.env.AWS_ACCESS_KEY,
