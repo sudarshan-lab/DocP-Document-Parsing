@@ -340,7 +340,17 @@ const upload = multer({ storage: storage });
     }
   });
 
-  
+  app.put('/api/contract/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, prompt, description } = req.body;
+      await Contract.findByIdAndUpdate(id, { name, prompt, description });
+      res.status(200).json({ message: 'contract item updated successfully' });
+    } catch (error) {
+      console.error('Error updating contract item:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  }); 
   
 
   const s3 = new AWS.S3({
