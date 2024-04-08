@@ -330,22 +330,35 @@ const upload = multer({ storage: storage });
     }
 });
 
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY,
-  secretAccessKey: process.env.AWS_ACCESS_SECRETKEY,
-  region: process.env.AWS_REGION,
-});
+  app.get('/api/contract', async (req, res) => {
+    try {
+      const items = await Contract.find();
+      res.json(items);
+    } catch (error) {
+      console.error('Error fetching inventory items:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
 
-const S3Upload = async (file,fileContent) => {
-  const params = {
-    Key: `${file.originalname}`,
-    Bucket: process.env.AWS_BUCKET_NAME,
-    ContentType: file.mimetype,
-    Body: fileContent,
-    ACL: "public-read",
+  
+  
+
+  const s3 = new AWS.S3({
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_ACCESS_SECRETKEY,
+    region: process.env.AWS_REGION,
+  });
+  
+  const S3Upload = async (file,fileContent) => {
+    const params = {
+      Key: `${file.originalname}`,
+      Bucket: process.env.AWS_BUCKET_NAME,
+      ContentType: file.mimetype,
+      Body: fileContent,
+      ACL: "public-read",
+    };
+    return await s3.upload(params).promise();
   };
-  return await s3.upload(params).promise();
-};
 
   app.post('/upload', upload.single('file'), async (req, res) => {
     try {
