@@ -352,6 +352,16 @@ const upload = multer({ storage: storage });
     }
   }); 
   
+  app.delete('/api/contract/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await Contract.findByIdAndDelete(id);
+      res.status(200).json({ message: 'contract item deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting contract item:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
 
   const s3 = new AWS.S3({
     accessKeyId: process.env.AWS_ACCESS_KEY,
