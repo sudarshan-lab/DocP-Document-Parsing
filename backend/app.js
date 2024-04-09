@@ -275,11 +275,11 @@ Extract the information from the CSV file. Look for columns or fields that corre
 
 Output Format:
 
-Format the extracted information into a JSON object as below:
+Format the extracted information into strictly level-l JSON :
 
 ${prompt}
 
-If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
+If any information cannot be found or extracted from either source, return null in there place in the JSON output.
 `;
 
 
