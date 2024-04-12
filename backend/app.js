@@ -275,11 +275,11 @@ Extract the information from the CSV file. Look for columns or fields that corre
 
 Output Format:
 
-Format the extracted information into strictly level-l JSON :
+Format the extracted information into a JSON object as below:
 
 ${prompt}
 
-If any information cannot be found or extracted from either source, return null in there place in the JSON output.
+If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
 `;
 
 
@@ -362,6 +362,36 @@ const upload = multer({ storage: storage });
       res.status(500).json({ message: 'Internal server error' });
     }
   });
+
+  
+
+  app.post('/api/signup',async (req,res)=>{
+    try{
+    const { firstName, lastName,userName,email,password } = req.body;
+    const users = await userModel.find({ $or: [{ userName: userName }, { email: email }] });
+    console.log(users);
+    if (users.length>0) {
+      return res.status(400).json({ message: 'Username or Email already exists' });
+    }
+  
+    const newUser = new userModel({
+      firstName,
+      lastName,
+      userName,
+      email,
+      password,
+      role:"user"
+    });
+    await newUser.save();
+    res.status(201).json(newUser);
+  
+  }
+  catch (error) {
+    console.error('Error adding inventory item:', error);
+    res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+
   app.get('/api/allData', async (req, res) => {
     try {
       const items = await ExtractedContract.find().populate({path: 'UserId contractId'});
