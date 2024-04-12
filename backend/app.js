@@ -363,7 +363,24 @@ const upload = multer({ storage: storage });
     }
   });
 
-  
+  app.post('/api/login', async (req, res) => {
+    const { userNameorEmail, password } = req.body;
+    try {
+      
+      const user = await userModel.findOne({ $or: [{ userName: userNameorEmail }, { email: userNameorEmail }] });
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      if (user.password !== password) {
+        return res.status(401).json({ message: 'Incorrect password' });
+      }
+      console.log(user);
+      return res.status(200).json({ message: 'Login successful', userInfo:user});
+    } catch (error) {
+      console.error('Error logging in:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
 
   app.post('/api/signup',async (req,res)=>{
     try{
