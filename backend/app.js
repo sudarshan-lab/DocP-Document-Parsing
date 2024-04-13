@@ -282,19 +282,31 @@ ${prompt}
 If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
 `;
 
+const prompttwo = `
+Use the following data
 
-  console.log(formattedPrompt)
+Raw Text data: ${lines}
+
+CSV Table data: ${tableCsv}
+
+Extract the data as per the following requirements and represent in JSON format:
+${prompt}
+
+Most Importantly, The output data should be strictly in JSON format only.
+`;
+
+  console.log(prompttwo)
   try {
     const response = await openai.chat.completions.create({
       messages:[
                 
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": formattedPrompt},
+        {"role": "user", "content": prompttwo},
     
 ],
       model: "gpt-3.5-turbo-0125",
       max_tokens: 2048,
-      temperature: 0,
+      temperature: 0.2,
       response_format:{"type": "json_object"},
     });
   
