@@ -38,7 +38,7 @@ const UserInformationPage = () => {
         console.log(response.data);
       })
       .catch((error) => {
-        console.error("Error fetching user data:", error);
+        console.error("Error fetching the user data:", error);
       });
   }, []);
 
