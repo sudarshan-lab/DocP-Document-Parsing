@@ -478,3 +478,19 @@ const upload = multer({ storage: storage });
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
+
+
+  app.get('/api/history/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log(id);
+      let items = await ExtractedContract.find().populate({ path: 'contractId' });
+      items = items.filter(item => String(item.UserId) === id);
+      console.log(items);
+      res.json(items);
+    } catch (error) {
+      console.error('Error fetching user history:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+ 
