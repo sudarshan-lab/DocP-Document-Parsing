@@ -12,9 +12,7 @@ import {
   import { TbInfoTriangle } from "react-icons/tb";
   import { RxCross2 } from "react-icons/rx";
   import axios from "axios";
-  import { PUBLIC_URL } from "../common/utils";
   import { message } from "antd";
-  import { prepareAnnouncements } from "../common/prepare-data";
   
   interface DashboardProps {
     title?: ReactNode;
