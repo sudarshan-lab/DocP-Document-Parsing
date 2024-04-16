@@ -73,7 +73,7 @@ const CreatAnnouncement = (props: CreateFaqFormProps) => {
   const onSubmitClicked = () => {
     if (edit?.forEdit) {
       axios
-        .put(PUBLIC_URL + `/api/contract/${contractData?.id}`, contractData)
+        .put(PUBLIC_URL + /api/contract/${contractData?.id}, contractData)
         .then((response) => {
           message.success("Updated contract..!");
           setShowModal(false);
