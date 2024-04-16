@@ -255,58 +255,31 @@ async function extract_results(prompt) {
   const lines = fs.readFileSync('temp.txt', 'utf8');
   const tableCsv = fs.readFileSync('tables.csv', 'utf8');
 
-  // Format the prompt
   const formattedPrompt = `
-Extract the following information from the provided sources and format the output in JSON:
+  Use the following data
 
-This is what you need to extract from the transcript:
-${prompt}
+  Raw Text data: ${lines}
 
-The sources available for extraction are a raw text file containing the extracted text from the transcript and a CSV file containing all tables from the transcript. 
-The CSV file is having more accurate information, so compare the extractions from both raw text data and CSV Table data, CSV table data must be present.
+  CSV Table data: ${tableCsv}
 
-Raw Text data: ${lines}
+  Extract the data as per the following requirements and represent in JSON format:
+  ${prompt}
 
-Extract the information from the raw text file. Search for patterns or keywords that indicate the relevant details such as name, branch, course code, and GPA. If necessary, use regular expressions or specific keywords to identify the required information.
+  Most Importantly, The output data should be strictly in JSON format only.
+  `;
 
-CSV Table data: ${tableCsv}
-
-Extract the information from the CSV file. Look for columns or fields that correspond to the requested information, such as student names, course codes, GPAs, etc. Match the values with the user-provided inputs to ensure accuracy.
-
-Output Format:
-
-Format the extracted information into a JSON object as below:
-
-${prompt}
-
-If any information cannot be found or extracted from either source, indicate it as null in the JSON output.
-`;
-
-const prompttwo = `
-Use the following data
-
-Raw Text data: ${lines}
-
-CSV Table data: ${tableCsv}
-
-Extract the data as per the following requirements and represent in JSON format:
-${prompt}
-
-Most Importantly, The output data should be strictly in JSON format only.
-`;
-
-  console.log(prompttwo)
+  console.log(formattedPrompt)
   try {
     const response = await openai.chat.completions.create({
       messages:[
                 
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": prompttwo},
+        {"role": "user", "content": formattedPrompt},
     
 ],
       model: "gpt-3.5-turbo-0125",
       max_tokens: 2048,
-      temperature: 0.2,
+      temperature: 0,
       response_format:{"type": "json_object"},
     });
   
