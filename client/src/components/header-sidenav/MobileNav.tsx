@@ -18,6 +18,7 @@ import {
   import { useEffect, useState } from "react";
   import { FiBell, FiChevronDown, FiMenu } from "react-icons/fi";
   import { useNavigate } from "react-router-dom";
+  import Profile from "../profile/Profile";
   interface MobileProps extends FlexProps {
     onOpen: () => void;
   }
@@ -136,6 +137,10 @@ import {
             </Menu>
           </Flex>
         </HStack>
+        <Profile
+        showModal={showProfileModal}
+        setShowModal={setShowProfileModal}
+      />
         
       </Flex>
     );
