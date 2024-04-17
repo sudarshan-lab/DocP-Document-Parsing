@@ -467,3 +467,31 @@ const upload = multer({ storage: storage });
     }
   });
  
+  
+  app.get('/api/dashboardcontracts', async (req, res) => {
+    try {
+      const totalContracts = await Contract.countDocuments();
+      const totalExtractedContracts = await ExtractedContract.countDocuments();
+  
+      const contracts = await Contract.find().lean(); // Retrieve all contracts
+  
+      // Fetch the count of extracted contracts for each contract
+      const contractsWithCount = await Promise.all(contracts.map(async (contract) => {
+        const extractedContractCount = await ExtractedContract.countDocuments({ contractId: contract._id });
+        return {
+          contractId: contract._id,
+          contractName: contract.name,
+          documentsUploaded: extractedContractCount
+        };
+      }));
+  
+      res.json({
+        totalContracts: totalContracts,
+        totalDocumentsUploaded: totalExtractedContracts,
+        contracts: contractsWithCount
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: 'Server Error' });
+    }
+  });
