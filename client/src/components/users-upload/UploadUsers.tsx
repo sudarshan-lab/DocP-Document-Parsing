@@ -143,8 +143,8 @@ const UploadUsers = () => {
             >
               Submit Documents
             </Text>
+            <Text>Select a contract </Text>
             <Flex mb="4" w="100%" direction={"column"}>
-              <Text>Select a contract </Text>
               <Select
                 style={{ width: "50%" }}
                 placeholder="select contract"

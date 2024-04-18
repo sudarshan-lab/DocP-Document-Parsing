@@ -14,9 +14,12 @@ import {
   HStack,
 } from "@chakra-ui/react";
 import axios from "axios";
+import Dashboard from "../dashboard/Dashboard";
 import { JsonToTable } from "react-json-to-table";
 import { AiFillEye, AiOutlineSync, AiTwotoneBulb } from "react-icons/ai";
 import dayjs from "dayjs";
+import TableContainer from "../common/TableContainer";
+
 
 const History = () => {
   const [userData, setUserData] = useState([]);
