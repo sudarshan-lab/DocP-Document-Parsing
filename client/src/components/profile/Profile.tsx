@@ -39,11 +39,6 @@ function Profile(props: ProfileProps) {
       firstName: usersData?.firstName,
       lastName: usersData?.lastName,
       email: usersData?.email,
-      phoneNumber: usersData?.phoneNumber,
-      addressLine1: usersData?.address?.addressLine1,
-      addressLine2: usersData?.address?.addressLine1,
-      city: usersData?.address?.city,
-      state: usersData?.address?.state,
     },
   });
 
@@ -55,31 +50,23 @@ function Profile(props: ProfileProps) {
       firstName: user?.firstName,
       lastName: user?.lastName,
       email: user?.email,
-      phoneNumber: user?.phoneNumber,
-      addressLine1: usersData?.address?.addressLine1,
-      addressLine2: usersData?.address?.addressLine1,
-      city: usersData?.address?.city,
-      state: usersData?.address?.state,
     });
     setFormData({
       ...formData,
       firstName: user?.firstName,
       lastName: user?.lastName,
       email: user?.email,
-      phoneNumber: user?.phoneNumber,
-      addressLine1: usersData?.address?.addressLine1,
-      addressLine2: usersData?.address?.addressLine1,
-      city: usersData?.address?.city,
-      state: usersData?.address?.state,
     });
   }, []);
 
   const onSubmitClicked = () => {
     axios
-      .put(PUBLIC_URL + "/users/update-profile", formData)
+      .put(PUBLIC_URL + "/api/update-profile", formData)
       .then((response) => {
         message.success("User profile updated successfully...!");
-        localStorage.setItem("userInfo", JSON.stringify(response.data.users));
+        setShowModal(false);
+        localStorage.setItem("userInfo",JSON.stringify(response.data.userInfo));
+        window.location.reload();
       })
       .catch((error) => {
         console.log("ERROR: ", error);
