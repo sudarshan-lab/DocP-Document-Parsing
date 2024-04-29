@@ -39,7 +39,7 @@ const UploadUsers = () => {
 
   useEffect(() => {
     axios
-      .get(PUBLIC_URL + "/api/contract")
+      .get("/api/contract")
       .then((response) => {
         const contracts = response.data;
         const prepareData = contracts?.map((item: any) => ({
@@ -85,7 +85,7 @@ const UploadUsers = () => {
 
     try {
       const response = await axios.post(
-        `${PUBLIC_URL}/upload`,
+        `/api/upload`,
         formDataWithContract,
         {
           headers: {

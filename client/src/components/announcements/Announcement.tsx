@@ -155,7 +155,7 @@ const Announcement = () => {
 
   const onDeleteClicked = (id: string) => {
     axios
-      .delete(PUBLIC_URL + `/api/contract/${id}`, {
+      .delete(`/api/contract/${id}`, {
         params: {
           id: id,
         },
@@ -178,7 +178,7 @@ const Announcement = () => {
 
   useEffect(() => {
     axios
-      .get(PUBLIC_URL + "/api/contract")
+      .get("/api/contract")
       .then((response) => {
         setContracts(response.data);
         setAnnouncementsStats(
@@ -194,7 +194,7 @@ const Announcement = () => {
 
   const getAllContracts = () =>{
     axios
-      .get(PUBLIC_URL + "/api/contract")
+      .get("/api/contract")
       .then((response) => {
         setContracts(response.data);
         getAllContracts();

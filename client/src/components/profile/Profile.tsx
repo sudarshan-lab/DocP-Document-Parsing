@@ -61,7 +61,7 @@ function Profile(props: ProfileProps) {
 
   const onSubmitClicked = () => {
     axios
-      .put(PUBLIC_URL + "/api/update-profile", formData)
+      .put("/api/update-profile", formData)
       .then((response) => {
         message.success("User profile updated successfully...!");
         setShowModal(false);

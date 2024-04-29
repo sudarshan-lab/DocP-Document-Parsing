@@ -26,7 +26,7 @@ import {
   
     useEffect(() => {
       axios
-        .get("http://ec2-50-17-74-223.compute-1.amazonaws.com:9000/api/dashboardcontracts")
+        .get("/api/dashboardcontracts")
         .then((response) => {
           console.log(response);
           setContractDocuments(response.data.contracts);

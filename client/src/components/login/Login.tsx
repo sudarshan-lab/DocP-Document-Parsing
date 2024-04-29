@@ -47,7 +47,7 @@ const Login = () => {
     ) {
       if (emailRegex.test((loginData as any)?.userNameorEmail)) {
         axios
-          .post(PUBLIC_URL + "/api/login", loginData)
+          .post("/api/login", loginData)
           .then((response) => {
             message.success("User logged in success..!");
             console.log(response.data);
@@ -97,7 +97,7 @@ const Login = () => {
       ) {
         if (emailRegex.test((signupData as any)?.email)) {
           axios
-            .post(PUBLIC_URL + "/api/signup", payload)
+            .post("/api/signup", payload)
             .then((response) => {
               message.success("Account created successfully..!");
             })

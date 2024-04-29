@@ -10,12 +10,15 @@ const db = require('./connection');
 
 const Contract = require('./contractModel');
 const ExtractedContract = require('./ExtractedContractModel')
-const userModel = require('./userModel');
+const userModel = require('./userModel'); 
 
 const app = express();
 app.use(express.json());
 dotenv.config();
 app.use(cors());
+
+const path = require("path");
+app.use(express.static(path.join(__dirname,"public")));
 
 const tableCsv = "someval";
 let lines = "someval";
@@ -191,10 +194,10 @@ function getJobResults(client, jobId) {
 }
 
 async function extract_text_from_pdf(pdfFile) {
-    const s3BucketName = "textextractbucket17";
+    const s3BucketName = "textextractbucket1";
     const s3Client = new AWS.S3({
-        accessKeyId: "AKIA4MTWLND6TG4GPBYZ",
-        secretAccessKey: "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"
+        accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
+        secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY
     });
     try {
         await s3Client.upload({ Bucket: s3BucketName, Key: pdfFile, Body: fs.createReadStream(pdfFile) }).promise();
@@ -204,9 +207,9 @@ async function extract_text_from_pdf(pdfFile) {
     }
 
     const textractClient = new AWS.Textract({
-        region: "eu-west-1",
-        accessKeyId: "AKIA4MTWLND6TG4GPBYZ",
-        secretAccessKey: "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"
+        region: process.env.TEXTRACT_REGION,
+        accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
+        secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY
     });
 
     const jobId = await startJob(textractClient, s3BucketName, pdfFile);
@@ -247,7 +250,7 @@ async function extract_text_from_pdf(pdfFile) {
 
 
 const openai = new OpenAI({
-  apiKey:"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"
+  apiKey: process.env.OPEN_AI_KEY
 });
 // Function to make a request to OpenAI API
 async function extract_results(prompt) {
@@ -440,13 +443,15 @@ const upload = multer({ storage: storage });
     return await s3.upload(params).promise();
   };
 
-  app.post('/upload', upload.single('file'), async (req, res) => {
+  app.post('/api/upload', upload.single('file'), async (req, res) => {
     try {
       const filePath = req.file.path;
       const fileContent = fs.readFileSync(filePath);
       const {contractId,userId} = req.body;
       const contr = await Contract.findById(contractId);
+      console.log("before S3 upload");
       const fC = await S3Upload(req.file,fileContent);
+      console.log("after S3 upload");
       const fileS3Url = fC.Location;
       console.log(contr.prompt);
       const result = await extract_text_from_pdf(filePath); // Call function to extract text from PDF
@@ -513,4 +518,8 @@ const upload = multer({ storage: storage });
       console.error(err);
       res.status(500).json({ message: 'Server Error' });
     }
+  });
+
+  app.get(/^\/(?!api).*/, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
   });
