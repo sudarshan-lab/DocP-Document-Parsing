@@ -5,7 +5,7 @@ export interface AnnouncementMetrics {
   UPCOMING: "Upcoming";
 }
 
-export const PUBLIC_URL = "http://localhost:9000";
+export const PUBLIC_URL = "http://ec2-50-17-74-223.compute-1.amazonaws.com:9000";
 // export const PUBLIC_URL = "http://18.225.235.171:5001";
 
 export const getFileType = (name: string) => {

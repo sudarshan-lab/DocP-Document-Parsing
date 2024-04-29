@@ -32,7 +32,7 @@ const History = () => {
     const user = JSON.parse(localStorage.getItem("userInfo"));
     const id = user._id;
     axios
-      .get(`http://localhost:9000/api/history/${id}`)
+      .get(`http://ec2-50-17-74-223.compute-1.amazonaws.com:9000/api/history/${id}`)
       .then((response) => {
         setUserData(response.data);
         console.log(response.data);

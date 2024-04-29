@@ -32,7 +32,7 @@ const UserInformationPage = () => {
 
   useEffect(() => {
     axios
-      .get("http://localhost:9000/api/allData")
+      .get("http://ec2-50-17-74-223.compute-1.amazonaws.com:9000/api/allData")
       .then((response) => {
         setUserData(response.data);
         console.log(response.data);
