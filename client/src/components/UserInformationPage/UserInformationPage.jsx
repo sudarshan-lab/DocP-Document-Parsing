@@ -34,6 +34,9 @@ const UserInformationPage = () => {
     axios
       .get("/api/allData")
       .then((response) => {
+        response.data = response.data.sort((a, b) =>
+        new Date(b.modifiedDate) - new Date(a.modifiedDate)
+      );
         setUserData(response.data);
         console.log(response.data);
       })
