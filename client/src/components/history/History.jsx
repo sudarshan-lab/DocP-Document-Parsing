@@ -97,7 +97,7 @@ const History = () => {
       title: "Date",
       dataIndex: "modifiedDate",
       render: (text, record) => {
-        return <Text>{dayjs(text).format("MM-DD-YYYY hh:MMa")}</Text>;
+        return <Text>{dayjs(text).format("MM-DD-YYYY hh:mmA")}</Text>;
       },
     },
     {
