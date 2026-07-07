@@ -6,8 +6,8 @@ const conParams = {
     useUnifiedTopology: true
 }
 
-//const uri = 'mongodb://localhost:27017/'
-const uri = `mongodb+srv://skammu:A1s2d3123@cluster0.mbt28mb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// DB connection string comes from backend/.env (MONGO_URI); falls back to a local MongoDB for dev.
+const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/docp';
 
 const connection = mongoose.connect(uri, conParams).then(()=> console.log('connected')).catch((err)=> console.log(err));
 

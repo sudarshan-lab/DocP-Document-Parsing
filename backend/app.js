@@ -1,6 +1,6 @@
 const fs = require('fs');
 const AWS = require('aws-sdk');
-const OpenAI = require("openai");
+const Anthropic = require('@anthropic-ai/sdk');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const cors = require("cors");
@@ -194,10 +194,14 @@ function getJobResults(client, jobId) {
 }
 
 async function extract_text_from_pdf(pdfFile) {
-    const s3BucketName = "textextractbucket1";
+    const s3BucketName = process.env.TEXTRACT_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
     const s3Client = new AWS.S3({
-        accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
-        secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY
+        region: process.env.TEXTRACT_REGION,
+        // Explicit keys if set; otherwise the SDK's default chain (e.g. an EC2 instance role)
+        ...(process.env.TEXTRACT_ACCESS_KEY && {
+            accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
+            secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY,
+        }),
     });
     try {
         await s3Client.upload({ Bucket: s3BucketName, Key: pdfFile, Body: fs.createReadStream(pdfFile) }).promise();
@@ -208,8 +212,10 @@ async function extract_text_from_pdf(pdfFile) {
 
     const textractClient = new AWS.Textract({
         region: process.env.TEXTRACT_REGION,
-        accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
-        secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY
+        ...(process.env.TEXTRACT_ACCESS_KEY && {
+            accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
+            secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY,
+        }),
     });
 
     const jobId = await startJob(textractClient, s3BucketName, pdfFile);
@@ -249,10 +255,12 @@ async function extract_text_from_pdf(pdfFile) {
 //const promp = "Please analyze the following high school transcript text and the associated table data to extract the student's name, date of birth, GPA, and course grades with credits. Format the extracted information as JSON key-value pairs. Ensure that the extracted data is accurate and neatly organized for each course listed";
 
 
-const openai = new OpenAI({
-  apiKey: process.env.OPEN_AI_KEY
+// Anthropic (Claude) client — reads ANTHROPIC_API_KEY from backend/.env
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
 });
-// Function to make a request to OpenAI API
+// Turn the extracted text + tables into JSON via Claude. Model claude-opus-4-8
+// (most capable); switch to claude-sonnet-4-6 / claude-haiku-4-5 for lower cost.
 async function extract_results(prompt) {
 
   const lines = fs.readFileSync('temp.txt', 'utf8');
@@ -273,20 +281,22 @@ async function extract_results(prompt) {
 
   console.log(formattedPrompt)
   try {
-    const response = await openai.chat.completions.create({
+    const response = await anthropic.messages.create({
+      model: "claude-opus-4-8",
+      max_tokens: 16000,
+      system: "You extract structured data from documents. Respond with a single valid JSON object only — no markdown, no code fences, and no text before or after the JSON.",
       messages:[
                 
-        {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": formattedPrompt},
     
 ],
-      model: "gpt-3.5-turbo-0125",
-      max_tokens: 2048,
-      temperature: 0,
-      response_format:{"type": "json_object"},
     });
   
-    const res = response.choices[0].message.content;
+    // content is an array of blocks; take the text block (ignores any thinking blocks)
+    const textBlock = response.content.find((b) => b.type === "text");
+    let res = textBlock ? textBlock.text.trim() : "";
+    // Strip accidental ```json ... ``` fences so the stored value is clean JSON
+    res = res.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
     return res;
   } catch (error) {
     console.error('Error:', error);
@@ -427,9 +437,11 @@ const upload = multer({ storage: storage });
   });
 
   const s3 = new AWS.S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY,
-    secretAccessKey: process.env.AWS_ACCESS_SECRETKEY,
     region: process.env.AWS_REGION,
+    ...(process.env.AWS_ACCESS_KEY && {
+      accessKeyId: process.env.AWS_ACCESS_KEY,
+      secretAccessKey: process.env.AWS_ACCESS_SECRETKEY,
+    }),
   });
   
   const S3Upload = async (file,fileContent) => {
