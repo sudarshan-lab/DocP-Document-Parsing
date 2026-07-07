@@ -450,7 +450,6 @@ const upload = multer({ storage: storage });
       Bucket: process.env.AWS_BUCKET_NAME,
       ContentType: file.mimetype,
       Body: fileContent,
-      ACL: "public-read",
     };
     return await s3.upload(params).promise();
   };
