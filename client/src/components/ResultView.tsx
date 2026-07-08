@@ -49,6 +49,36 @@ const isNum = (v: any) =>
   typeof v === "number" ||
   (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v)));
 
+function chartable(rows: any[]): boolean {
+  const cols = Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
+  const numeric = cols.filter((c) => rows.some((r) => isNum(r[c])));
+  const label = cols.find((c) => !numeric.includes(c));
+  return numeric.length > 0 && !!label;
+}
+
+// Find an array of flat rows to chart — either the value itself, or the best
+// nested array inside an object (searched up to two levels deep). Lets nested
+// JSON like {"chart_ready_data": {"items": [...]}} still offer charts.
+function findChartRows(data: any): any[] | null {
+  const direct = asRows(data);
+  if (direct) return direct;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const candidates: any[][] = [];
+    for (const v of Object.values(data)) {
+      const r = asRows(v);
+      if (r) candidates.push(r);
+      else if (v && typeof v === "object" && !Array.isArray(v)) {
+        for (const vv of Object.values(v)) {
+          const r2 = asRows(vv);
+          if (r2) candidates.push(r2);
+        }
+      }
+    }
+    return candidates.find(chartable) || candidates[0] || null;
+  }
+  return null;
+}
+
 function download(name: string, content: string, mime: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
   const a = document.createElement("a");
@@ -83,7 +113,7 @@ function Seg({
 }
 
 export default function ResultView({ data }: { data: any }) {
-  const rows = useMemo(() => asRows(data), [data]);
+  const rows = useMemo(() => findChartRows(data), [data]);
   const cols = useMemo(
     () => (rows ? Array.from(new Set(rows.flatMap((r) => Object.keys(r)))) : []),
     [rows]
