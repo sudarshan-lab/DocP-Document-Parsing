@@ -29,12 +29,13 @@ const COLORS = [
 ];
 
 const tooltipStyle: any = {
-  background: "var(--bg)",
-  border: "none",
-  borderRadius: 12,
-  boxShadow: "var(--neu-out)",
-  color: "var(--text)",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  color: "var(--fg)",
 };
+// recharts colours item/label text on its own (defaults to dark) — force theme fg
+const tipText: any = { color: "var(--fg)" };
 
 type View = "table" | "bar" | "line" | "pie";
 
@@ -201,7 +202,12 @@ export default function ResultView({ data }: { data: any }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                 <XAxis dataKey={label!} tick={{ fill: "var(--text-dim)", fontSize: 12 }} />
                 <YAxis tick={{ fill: "var(--text-dim)", fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  itemStyle={tipText}
+                  labelStyle={tipText}
+                  cursor={{ fill: "rgba(125,133,144,0.12)" }}
+                />
                 <Legend />
                 {numeric.map((c, i) => (
                   <Bar key={c} dataKey={c} fill={COLORS[i % COLORS.length]} radius={[6, 6, 0, 0]} />
@@ -212,7 +218,7 @@ export default function ResultView({ data }: { data: any }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                 <XAxis dataKey={label!} tick={{ fill: "var(--text-dim)", fontSize: 12 }} />
                 <YAxis tick={{ fill: "var(--text-dim)", fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} itemStyle={tipText} labelStyle={tipText} />
                 <Legend />
                 {numeric.map((c, i) => (
                   <Line key={c} type="monotone" dataKey={c} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} />
@@ -220,7 +226,7 @@ export default function ResultView({ data }: { data: any }) {
               </LineChart>
             ) : (
               <PieChart>
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} itemStyle={tipText} labelStyle={tipText} />
                 <Pie data={chartData} dataKey={numeric[0]} nameKey={label!} outerRadius={115} label>
                   {chartData.map((_, i) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
