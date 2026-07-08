@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { message } from "antd";
-import TableView from "./TableView";
+import ResultView from "./ResultView";
 import LoadingMessages from "./LoadingMessages";
 import { queryFile, saveTable } from "../api";
 
@@ -33,7 +33,7 @@ function renderData(data: any) {
       );
     }
   }
-  return <TableView data={data} />;
+  return <ResultView data={data} />;
 }
 
 export default function Chatbot({
@@ -41,11 +41,13 @@ export default function Chatbot({
   fileName,
   onClose,
   onSaved,
+  suggestions,
 }: {
   fileId: string;
   fileName: string;
   onClose: () => void;
   onSaved: () => void;
+  suggestions?: string[];
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([
     {
@@ -63,11 +65,15 @@ export default function Chatbot({
     bodyRef.current?.scrollTo({ top: 1e9, behavior: "smooth" });
   }, [msgs, busy]);
 
-  const ask = () => {
-    const q = input.trim();
+  const askQuery = (raw: string) => {
+    const q = raw.trim();
     if (!q || busy) return;
-    setInput("");
     setMsgs((m) => [...m, { id: uid(), role: "confirm", query: q }]);
+  };
+  const ask = () => {
+    if (!input.trim() || busy) return;
+    askQuery(input);
+    setInput("");
   };
 
   const cancel = (confirmId: string) =>
@@ -315,6 +321,28 @@ export default function Chatbot({
               </div>
             );
           })}
+          {suggestions &&
+            suggestions.length > 0 &&
+            !msgs.some((m) => m.role === "user" || m.role === "confirm") && (
+              <div>
+                <div
+                  style={{
+                    color: "var(--text-faint)",
+                    fontSize: 12,
+                    margin: "2px 0 8px",
+                  }}
+                >
+                  Suggested questions
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {suggestions.map((q, i) => (
+                    <button key={i} className="chip" onClick={() => askQuery(q)}>
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           {busy && (
             <div style={{ ...bubbleBase, alignSelf: "flex-start" }}>
               <LoadingMessages compact />

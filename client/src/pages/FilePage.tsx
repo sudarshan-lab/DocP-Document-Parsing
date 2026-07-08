@@ -5,7 +5,7 @@ import { message } from "antd";
 import dayjs from "dayjs";
 import AppShell from "../components/AppShell";
 import Chatbot from "../components/Chatbot";
-import TableView from "../components/TableView";
+import ResultView from "../components/ResultView";
 import LoadingMessages from "../components/LoadingMessages";
 import { getFile, deleteTable, FileItem, TableResultItem } from "../api";
 
@@ -82,6 +82,40 @@ export default function FilePage() {
         )}
       </div>
 
+      {(file.summary || (file.keyFacts && file.keyFacts.length > 0)) && (
+        <div className="glass" style={{ padding: 20, marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 18 }}>✨</span>
+            <strong style={{ fontSize: 16 }}>AI overview</strong>
+          </div>
+          {file.summary && (
+            <p style={{ color: "var(--text-dim)", margin: "0 0 14px", lineHeight: 1.6 }}>
+              {file.summary}
+            </p>
+          )}
+          {file.keyFacts && file.keyFacts.length > 0 && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {file.keyFacts.map((f: any, i: number) => (
+                <div key={i} className="neu-inset" style={{ padding: "10px 14px" }}>
+                  <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
+                    {f?.label ?? ""}
+                  </div>
+                  <div style={{ fontWeight: 600, marginTop: 3 }}>
+                    {typeof f?.value === "object" ? JSON.stringify(f?.value) : String(f?.value ?? "")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="file-grid">
         {/* viewer */}
         <div className="glass file-viewer" style={{ padding: 12, overflow: "hidden" }}>
@@ -153,6 +187,7 @@ export default function FilePage() {
           fileName={file.fileName}
           onClose={() => setChatOpen(false)}
           onSaved={load}
+          suggestions={file.suggestedQuestions}
         />
       )}
 
@@ -202,7 +237,7 @@ export default function FilePage() {
                 </button>
               </div>
             </div>
-            <TableView data={modal.data} />
+            <ResultView data={modal.data} />
           </motion.div>
         </motion.div>
       )}

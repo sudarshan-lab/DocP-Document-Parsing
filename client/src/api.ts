@@ -22,6 +22,9 @@ export interface FileItem {
   mimeType?: string;
   error?: string;
   createdAt: string;
+  summary?: string;
+  keyFacts?: { label: string; value: any }[];
+  suggestedQuestions?: string[];
 }
 
 export interface TableResultItem {

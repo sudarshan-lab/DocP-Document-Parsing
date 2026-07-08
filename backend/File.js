@@ -12,6 +12,9 @@ const fileSchema = new mongoose.Schema(
     status: { type: String, enum: ['processing', 'ready', 'failed'], default: 'processing' },
     rawText: { type: String, default: '' },
     tablesCsv: { type: String, default: '' },
+    summary: { type: String, default: '' },
+    keyFacts: { type: mongoose.Schema.Types.Mixed, default: [] },
+    suggestedQuestions: { type: [String], default: [] },
     error: { type: String, default: '' },
   },
   { timestamps: true }

@@ -1,10 +1,23 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { getUser, logout } from "../auth";
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const nav = useNavigate();
   const user = getUser();
+  const [theme, setTheme] = useState(() =>
+    document.documentElement.getAttribute("data-theme") === "light"
+      ? "light"
+      : "dark"
+  );
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("docp_theme", next);
+    if (next === "light")
+      document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+  };
   return (
     <div style={{ minHeight: "100vh" }}>
       <span className="orb a" />
@@ -32,6 +45,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <span style={{ color: "var(--text-dim)", fontSize: 14 }}>
             {user ? `${user.firstName} ${user.lastName}` : ""}
           </span>
+          <button className="btn btn-sm" onClick={toggleTheme} title="Toggle theme">
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
           <button
             className="btn btn-sm"
             onClick={() => {
