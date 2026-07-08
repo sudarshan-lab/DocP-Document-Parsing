@@ -1,29 +1,38 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Dashboard from "./pages/Dashboard";
+import FilePage from "./pages/FilePage";
+import { isAuthed } from "./auth";
 
-import "./App.css";
-import Dashboard from "./components/dashboard/Dashboard";
-import UploadUsers from "./components/users-upload/UploadUsers";
-import Announcement from "./components/announcements/Announcement";
-import Login from "./components/login/Login";
-import AdminDashboard from "./components/dashboard/AdminDashboard";
-import History from "./components/history/History";
-import UserInformationPage from "./components/UserInformationPage/UserInformationPage";
-function App() {
-  return (
-    <div className="App">
-      <Router>
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/dashboard" element={<AdminDashboard />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/contract" element={<Announcement />} />
-          <Route path="/fileupload" element={<UploadUsers />} />
-          <Route path="/userInformationPage" element={<UserInformationPage />} />
-        </Routes>
-      </Router>
-    </div>
-  );
+function Protected({ children }: { children: JSX.Element }) {
+  return isAuthed() ? children : <Navigate to="/login" replace />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/"
+          element={
+            <Protected>
+              <Dashboard />
+            </Protected>
+          }
+        />
+        <Route
+          path="/files/:id"
+          element={
+            <Protected>
+              <FilePage />
+            </Protected>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

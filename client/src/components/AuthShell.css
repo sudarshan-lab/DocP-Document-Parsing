@@ -1,0 +1,81 @@
+.auth-grid {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  align-items: center;
+  gap: 30px;
+  padding: 40px;
+}
+.auth-hero {
+  padding: 0 6%;
+  animation: rise 0.7s ease both;
+}
+.auth-hero .kicker {
+  font-size: 20px;
+  font-weight: 800;
+}
+.auth-hero h1 {
+  font-size: 54px;
+  line-height: 1.05;
+  margin: 18px 0 14px;
+  font-weight: 800;
+}
+.auth-hero p {
+  color: var(--text-dim);
+  font-size: 18px;
+  max-width: 470px;
+  margin: 0;
+}
+.auth-feats {
+  list-style: none;
+  padding: 0;
+  margin: 30px 0 0;
+  display: grid;
+  gap: 13px;
+}
+.auth-feats li {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.auth-feats .tick {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(124, 108, 255, 0.18);
+  color: var(--accent-2);
+  flex-shrink: 0;
+}
+.auth-card {
+  padding: 38px 34px;
+  width: 100%;
+  max-width: 430px;
+  justify-self: center;
+  animation: rise 0.7s ease 0.08s both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 900px) {
+  .auth-grid {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+  .auth-hero {
+    display: none;
+  }
+  .auth-card {
+    max-width: 460px;
+  }
+}

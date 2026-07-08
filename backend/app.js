@@ -1,536 +1,361 @@
-const fs = require('fs');
 const AWS = require('aws-sdk');
 const Anthropic = require('@anthropic-ai/sdk');
 const dotenv = require('dotenv');
-const axios = require('axios');
-const cors = require("cors");
+const cors = require('cors');
 const express = require('express');
 const multer = require('multer');
-const db = require('./connection');
+const path = require('path');
 
-const Contract = require('./contractModel');
-const ExtractedContract = require('./ExtractedContractModel')
-const userModel = require('./userModel'); 
+require('./connection');
+const File = require('./File');
+const TableResult = require('./TableResult');
+const userModel = require('./userModel');
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
-dotenv.config();
 app.use(cors());
+app.use(express.static(path.join(__dirname, 'public')));
 
-const path = require("path");
-app.use(express.static(path.join(__dirname,"public")));
+// ---------------------------------------------------------------------------
+// AWS + Anthropic clients (explicit keys only if set; otherwise the SDK's
+// default chain — e.g. an EC2 instance role).
+// ---------------------------------------------------------------------------
+const BUCKET = process.env.AWS_BUCKET_NAME;
 
-const tableCsv = "someval";
-let lines = "someval";
+const s3 = new AWS.S3({
+  region: process.env.AWS_REGION,
+  ...(process.env.AWS_ACCESS_KEY && {
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_ACCESS_SECRETKEY,
+  }),
+});
 
-// Display information about a block
-function displayBlockInfo(block) {
-    console.log("Block Id: " + block.Id);
-    console.log("Type: " + block.BlockType);
-    if ('EntityTypes' in block) {
-        console.log('EntityTypes: ' + JSON.stringify(block.EntityTypes));
-    }
+const textract = new AWS.Textract({
+  region: process.env.TEXTRACT_REGION,
+  ...(process.env.TEXTRACT_ACCESS_KEY && {
+    accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
+    secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY,
+  }),
+});
 
-    if ('Text' in block) {
-        console.log("Text: " + block.Text);
-    }
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    if (block.BlockType !== 'PAGE') {
-        console.log("Confidence: " + (block.Confidence ? block.Confidence.toFixed(2) + "%" : "N/A"));
-    }
-
-    console.log();
+// ---------------------------------------------------------------------------
+// Textract: async document analysis -> raw text + CSV of detected tables
+// ---------------------------------------------------------------------------
+function startJob(client, bucket, key) {
+  return new Promise((resolve, reject) => {
+    client.startDocumentAnalysis(
+      { DocumentLocation: { S3Object: { Bucket: bucket, Name: key } }, FeatureTypes: ['TABLES'] },
+      (err, data) => (err ? reject(err) : resolve(data.JobId))
+    );
+  });
 }
 
-// Generate CSV representation of tables detected in the document
-function getTableCsvResults(blocks) {
-  console.log(blocks);
+function isJobComplete(client, jobId) {
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      client.getDocumentAnalysis({ JobId: jobId }, (err, data) => {
+        if (err) return reject(err);
+        if (data.JobStatus === 'IN_PROGRESS') return setTimeout(check, 1500);
+        if (data.JobStatus === 'SUCCEEDED') return resolve(data);
+        reject(new Error('Textract job ' + data.JobStatus + (data.StatusMessage ? ': ' + data.StatusMessage : '')));
+      });
+    };
+    check();
+  });
+}
 
+function getJobResults(client, jobId) {
+  return new Promise((resolve, reject) => {
+    const pages = [];
+    const get = (nextToken) => {
+      client.getDocumentAnalysis({ JobId: jobId, NextToken: nextToken }, (err, data) => {
+        if (err) return reject(err);
+        pages.push(data);
+        if (data.NextToken) return setTimeout(() => get(data.NextToken), 500);
+        resolve(pages);
+      });
+    };
+    get();
+  });
+}
+
+function cellText(result, blocksMap) {
+  let text = '';
+  for (const rel of result.Relationships || []) {
+    if (rel.Type !== 'CHILD') continue;
+    for (const childId of rel.Ids) {
+      const w = blocksMap[childId];
+      if (!w) continue;
+      if (w.BlockType === 'WORD') text += w.Text + ' ';
+      if (w.BlockType === 'SELECTION_ELEMENT' && w.SelectionStatus === 'SELECTED') text += 'X ';
+    }
+  }
+  return text.trim();
+}
+
+function tableToCsv(tableBlock, blocksMap, index) {
+  const rows = {};
+  for (const rel of tableBlock.Relationships || []) {
+    if (rel.Type !== 'CHILD') continue;
+    for (const childId of rel.Ids) {
+      const cell = blocksMap[childId];
+      if (cell && cell.BlockType === 'CELL') {
+        rows[cell.RowIndex] = rows[cell.RowIndex] || {};
+        rows[cell.RowIndex][cell.ColumnIndex] = cellText(cell, blocksMap);
+      }
+    }
+  }
+  let csv = `Table ${index}\n`;
+  for (const cols of Object.values(rows)) {
+    csv += Object.values(cols).map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',') + '\n';
+  }
+  return csv + '\n';
+}
+
+function blocksToTablesCsv(blocks) {
   const blocksMap = {};
   const tableBlocks = [];
-  for (const block of blocks) {
-      blocksMap[block.Id] = block;
-      if (block.BlockType === "TABLE") {
-          tableBlocks.push(block);
-      }
+  for (const b of blocks) {
+    blocksMap[b.Id] = b;
+    if (b.BlockType === 'TABLE') tableBlocks.push(b);
   }
-
-  if (tableBlocks.length <= 0) {
-      return "<b> NO Table FOUND </b>";
-  }
-
-  let csv = '';
-  for (let index = 0; index < tableBlocks.length; index++) {
-      const tableResult = tableBlocks[index];
-      csv += generateTableCsv(tableResult, blocksMap, index + 1);
-      csv += '\n\n';
-  }
-
-  return csv;
+  return tableBlocks.map((t, i) => tableToCsv(t, blocksMap, i + 1)).join('');
 }
 
-// Generate CSV representation for a table
-function generateTableCsv(tableResult, blocksMap, tableIndex) {
-  const rows = getRowsColumnsMap(tableResult, blocksMap);
-
-  const tableId = 'Table_' + tableIndex;
-
-  let csv = 'Table: ' + tableId + '\n\n';
-
-  for (const [rowIndex, cols] of Object.entries(rows)) {
-      for (const [colIndex, text] of Object.entries(cols)) {
-          csv += text + ",";
-      }
-      csv += '\n';
-  }
-
-  csv += '\n\n\n';
-  return csv;
-}
-
-// Map rows and columns of a table
-function getRowsColumnsMap(tableResult, blocksMap) {
-  const rows = {};
-  for (const relationship of tableResult.Relationships) {
-      if (relationship.Type === 'CHILD') {
-          for (const childId of relationship.Ids) {
-              try {
-                  const cell = blocksMap[childId];
-                  if (cell.BlockType === 'CELL') {
-                      const rowIndex = cell.RowIndex;
-                      const colIndex = cell.ColumnIndex;
-                      if (!rows[rowIndex]) {
-                          rows[rowIndex] = {};
-                      }
-                      rows[rowIndex][colIndex] = getText(cell, blocksMap);
-                  }
-              } catch (error) {
-                  console.error("Error extracting Table data:", error);
-              }
-          }
-      }
-  }
-  return rows;
-}
-
-// Get text from a block
-function getText(result, blocksMap) {
-  let text = '';
-  if ('Relationships' in result) {
-      for (const relationship of result.Relationships) {
-          if (relationship.Type === 'CHILD') {
-              for (const childId of relationship.Ids) {
-                  try {
-                      const word = blocksMap[childId];
-                      if (word.BlockType === 'WORD') {
-                          text += word.Text + ' ';
-                      }
-                      if (word.BlockType === 'SELECTION_ELEMENT' && word.SelectionStatus === 'SELECTED') {
-                          text += 'X ';
-                      }
-                  } catch (error) {
-                      console.error("Error extracting Table data:", error);
-                  }
-              }
-          }
-      }
-  }
-  return text;
-}
-
-// Start document analysis job
-function startJob(client, s3BucketName, objectName) {
-    return new Promise((resolve, reject) => {
-        client.startDocumentAnalysis({
-            DocumentLocation: { S3Object: { Bucket: s3BucketName, Name: objectName } },
-            FeatureTypes: ["TABLES"]
-        }, (err, data) => {
-            if (err) reject(err);
-            else resolve(data.JobId);
-        });
-    });
-}
-
-// Check if document analysis job is complete
-function isJobComplete(client, jobId) {
-    return new Promise((resolve, reject) => {
-        function checkJobStatus() {
-            client.getDocumentAnalysis({ JobId: jobId }, (err, data) => {
-                if (err) reject(err);
-                else {
-                    console.log("Job status: " + data.JobStatus);
-                    if (data.JobStatus === "IN_PROGRESS") {
-                        setTimeout(checkJobStatus, 1000);
-                    } else {
-                        resolve(data);
-                    }
-                }
-            });
-        }
-        checkJobStatus();
-    });
-}
-
-// Get document analysis job results
-function getJobResults(client, jobId) {
-    return new Promise((resolve, reject) => {
-        const pages = [];
-        function getResults(nextToken) {
-            client.getDocumentAnalysis({ JobId: jobId, NextToken: nextToken }, (err, data) => {
-                if (err) reject(err);
-                else {
-                    pages.push(data);
-                    console.log("Resultset page received: " + pages.length);
-                    if (data.NextToken) {
-                        setTimeout(() => getResults(data.NextToken), 1000);
-                    } else {
-                        resolve(pages);
-                    }
-                }
-            });
-        }
-        getResults(null);
-    });
-}
-
-async function extract_text_from_pdf(pdfFile) {
-    const s3BucketName = process.env.TEXTRACT_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
-    const s3Client = new AWS.S3({
-        region: process.env.TEXTRACT_REGION,
-        // Explicit keys if set; otherwise the SDK's default chain (e.g. an EC2 instance role)
-        ...(process.env.TEXTRACT_ACCESS_KEY && {
-            accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
-            secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY,
-        }),
-    });
-    try {
-        await s3Client.upload({ Bucket: s3BucketName, Key: pdfFile, Body: fs.createReadStream(pdfFile) }).promise();
-    } catch (error) {
-        console.error("Error uploading file to S3:", error);
-        return;
+async function runTextract(s3Key) {
+  const jobId = await startJob(textract, BUCKET, s3Key);
+  await isJobComplete(textract, jobId);
+  const pages = await getJobResults(textract, jobId);
+  const lines = [];
+  let tablesCsv = '';
+  for (const page of pages) {
+    for (const b of page.Blocks || []) {
+      if (b.BlockType === 'LINE') lines.push(b.Text);
     }
-
-    const textractClient = new AWS.Textract({
-        region: process.env.TEXTRACT_REGION,
-        ...(process.env.TEXTRACT_ACCESS_KEY && {
-            accessKeyId: process.env.TEXTRACT_ACCESS_KEY,
-            secretAccessKey: process.env.TEXTRACT_SECRET_ACCESS_KEY,
-        }),
-    });
-
-    const jobId = await startJob(textractClient, s3BucketName, pdfFile);
-    console.log("Started job with id: " + jobId);
-    const jobResult = await isJobComplete(textractClient, jobId);
-    const response = await getJobResults(textractClient, jobId);
-
-    if (fs.existsSync('tables.csv')) fs.unlinkSync('tables.csv');
-    if (fs.existsSync('temp.txt')) fs.unlinkSync('temp.txt');
-
-    for (const resultPage of response) {
-        const blocks = resultPage.Blocks;
-        const tableCsv = getTableCsvResults(blocks);
-        const outputFileName = "tables.csv";
-        fs.appendFileSync(outputFileName, tableCsv);
-        //console.log('Detected Document Text');
-        //console.log('Pages: ' + resultPage.DocumentMetadata.Pages);
-        //console.log('OUTPUT TO CSV FILE: ' + outputFileName);
-        for (const block of blocks) {
-            displayBlockInfo(block);
-            //console.log();
-        }
-    }
-
-    lines = [];
-    for (const resultPage of response) {
-        for (const item of resultPage.Blocks) {
-            if (item.BlockType === "LINE") {
-                //console.log(item.Text);
-                lines.push(item.Text);
-            }
-        }
-    }
-    lines = lines.join('\n');
-    fs.writeFileSync('temp.txt', lines);
+    tablesCsv += blocksToTablesCsv(page.Blocks || []);
+  }
+  return { rawText: lines.join('\n'), tablesCsv };
 }
-//const promp = "Please analyze the following high school transcript text and the associated table data to extract the student's name, date of birth, GPA, and course grades with credits. Format the extracted information as JSON key-value pairs. Ensure that the extracted data is accurate and neatly organized for each course listed";
 
-
-// Anthropic (Claude) client — reads ANTHROPIC_API_KEY from backend/.env
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-});
-// Turn the extracted text + tables into JSON via Claude. Model claude-opus-4-8
-// (most capable); switch to claude-sonnet-4-6 / claude-haiku-4-5 for lower cost.
-async function extract_results(prompt) {
-
-  const lines = fs.readFileSync('temp.txt', 'utf8');
-  const tableCsv = fs.readFileSync('tables.csv', 'utf8');
-
-  const formattedPrompt = `
-  Use the following data
-
-  Raw Text data: ${lines}
-
-  CSV Table data: ${tableCsv}
-
-  Extract the data as per the following requirements and represent in JSON format:
-  ${prompt}
-
-  Most Importantly, The output data should be strictly in JSON format only.
-  `;
-
-  console.log(formattedPrompt)
+// Runs in the background after upload; updates the File doc when done.
+async function processFile(fileId, s3Key) {
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 16000,
-      system: "You extract structured data from documents. Respond with a single valid JSON object only — no markdown, no code fences, and no text before or after the JSON.",
-      messages:[
-                
-        {"role": "user", "content": formattedPrompt},
-    
-],
-    });
-  
-    // content is an array of blocks; take the text block (ignores any thinking blocks)
-    const textBlock = response.content.find((b) => b.type === "text");
-    let res = textBlock ? textBlock.text.trim() : "";
-    // Strip accidental ```json ... ``` fences so the stored value is clean JSON
-    res = res.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-    return res;
-  } catch (error) {
-    console.error('Error:', error);
-    return null;
+    const { rawText, tablesCsv } = await runTextract(s3Key);
+    await File.findByIdAndUpdate(fileId, { rawText, tablesCsv, status: 'ready', error: '' });
+  } catch (err) {
+    console.error('processFile error:', err && err.message);
+    await File.findByIdAndUpdate(fileId, { status: 'failed', error: (err && err.message) || 'Processing failed' });
   }
 }
 
+// ---------------------------------------------------------------------------
+// Claude: document text + a user question -> a single JSON object
+// ---------------------------------------------------------------------------
+async function askClaude(rawText, tablesCsv, query) {
+  const prompt = `You are given the extracted contents of a single document.
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-      cb(null, 'uploads/') // specify the directory where uploaded files will be stored
-  },
-  filename: function (req, file, cb) {
-      cb(null, file.originalname) // use the original file name for storing
-  }
-});
+RAW TEXT:
+${rawText}
 
-const upload = multer({ storage: storage });
+DETECTED TABLES (CSV):
+${tablesCsv || '(none)'}
 
-  app.post('/api/contract', async (req, res) => {
-    try {
-        const { name, prompt, description } = req.body;
-        const newContract = new Contract({ name, prompt, description });
-        await newContract.save();
-        res.json({ message: 'Contract created successfully', newContract });
-    } catch (error) {
-        console.error('Error adding contract item:', error.message);
-        res.status(500).json({ error: 'Failed to add contract item' });
-    }
-});
+Answer the user's request using ONLY the information in this document. Represent the
+answer as a single JSON object. For tabular answers use an array of objects with
+consistent keys. If the document does not contain the answer, return {"note": "..."}.
 
-  app.get('/api/contract', async (req, res) => {
-    try {
-      const items = await Contract.find();
-      res.json(items);
-    } catch (error) {
-      console.error('Error fetching inventory items:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
+User request: ${query}`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-8',
+    max_tokens: 16000,
+    system:
+      'You extract structured data from documents and always respond with a single valid JSON object only — no markdown, no code fences, no text before or after the JSON.',
+    messages: [{ role: 'user', content: prompt }],
   });
+  const block = response.content.find((b) => b.type === 'text');
+  let text = block ? block.text.trim() : '';
+  return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+}
 
-  app.put('/api/contract/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { name, prompt, description } = req.body;
-      await Contract.findByIdAndUpdate(id, { name, prompt, description });
-      res.status(200).json({ message: 'contract item updated successfully' });
-    } catch (error) {
-      console.error('Error updating contract item:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
-  }); 
+// In-memory upload; the buffer goes straight to S3 (no local disk needed).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-  app.put('/api/update-profile', async (req, res) => {
-    const { firstName, lastName, email } = req.body;
-
+// ===========================================================================
+// Auth
+// ===========================================================================
+app.post('/api/signup', async (req, res) => {
   try {
-    const user = await userModel.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    user.firstName = firstName;
-    user.lastName = lastName;
-    await user.save();
-    return res.status(200).json({ message: 'User profile updated successfully', userInfo:user });
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    return res.status(500).json({ error: 'Failed to update user profile' });
-  }
-  }); 
-  
-  app.delete('/api/contract/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      await Contract.findByIdAndDelete(id);
-      res.status(200).json({ message: 'contract item deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting contract item:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
-  });
-
-  app.post('/api/login', async (req, res) => {
-    const { userNameorEmail, password } = req.body;
-    try {
-      
-      const user = await userModel.findOne({ $or: [{ userName: userNameorEmail }, { email: userNameorEmail }] });
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      if (user.password !== password) {
-        return res.status(401).json({ message: 'Incorrect password' });
-      }
-      console.log(user);
-      return res.status(200).json({ message: 'Login successful', userInfo:user});
-    } catch (error) {
-      console.error('Error logging in:', error);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  });
-
-  app.post('/api/signup',async (req,res)=>{
-    try{
-    const { firstName, lastName,userName,email,password } = req.body;
-    const users = await userModel.find({ $or: [{ userName: userName }, { email: email }] });
-    console.log(users);
-    if (users.length>0) {
-      return res.status(400).json({ message: 'Username or Email already exists' });
-    }
-  
-    const newUser = new userModel({
-      firstName,
-      lastName,
-      userName,
-      email,
-      password,
-      role:"user"
-    });
-    await newUser.save();
-    res.status(201).json(newUser);
-  
-  }
-  catch (error) {
-    console.error('Error adding inventory item:', error);
+    const { firstName, lastName, userName, email, password } = req.body;
+    const existing = await userModel.find({ $or: [{ userName }, { email }] });
+    if (existing.length > 0) return res.status(400).json({ message: 'Username or email already exists' });
+    const newUser = await userModel.create({ firstName, lastName, userName, email, password });
+    res.status(201).json({ message: 'Account created', userInfo: newUser });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Internal server error' });
-    }
-  })
+  }
+});
 
-  app.get('/api/allData', async (req, res) => {
+app.post('/api/login', async (req, res) => {
+  const { userNameorEmail, password } = req.body;
+  try {
+    const user = await userModel.findOne({ $or: [{ userName: userNameorEmail }, { email: userNameorEmail }] });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.password !== password) return res.status(401).json({ message: 'Incorrect password' });
+    res.status(200).json({ message: 'Login successful', userInfo: user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ===========================================================================
+// Files
+// ===========================================================================
+// Upload -> store in S3 -> respond immediately -> parse with Textract in background
+app.post('/api/files', upload.single('file'), async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!req.file) return res.status(400).json({ message: 'No file provided' });
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+    const s3Key = `${userId}/${Date.now()}-${req.file.originalname}`;
+    await s3
+      .upload({ Bucket: BUCKET, Key: s3Key, Body: req.file.buffer, ContentType: req.file.mimetype })
+      .promise();
+
+    const fileDoc = await File.create({
+      userId,
+      fileName: req.file.originalname,
+      s3Key,
+      mimeType: req.file.mimetype,
+      status: 'processing',
+    });
+
+    res.status(201).json({ fileId: fileDoc._id, status: 'processing' });
+    processFile(fileDoc._id, s3Key); // fire-and-forget
+  } catch (err) {
+    console.error('upload error:', err && err.message);
+    res.status(500).json({ message: 'Upload failed' });
+  }
+});
+
+// List a user's files (light — no raw text / tables blob)
+app.get('/api/files', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const files = await File.find(userId ? { userId } : {})
+      .select('-rawText -tablesCsv')
+      .sort({ createdAt: -1 });
+    res.json(files);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// File details + presigned view URL + its saved tables
+app.get('/api/files/:id', async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id).select('-rawText -tablesCsv');
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    const viewUrl = s3.getSignedUrl('getObject', { Bucket: BUCKET, Key: file.s3Key, Expires: 3600 });
+    const tables = await TableResult.find({ fileId: file._id }).sort({ createdAt: -1 });
+    res.json({ file, viewUrl, tables });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Generate a table for a query — NOT saved (returned for the user to confirm/keep)
+app.post('/api/files/:id/query', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || !String(query).trim()) return res.status(400).json({ message: 'Query is required' });
+    const file = await File.findById(req.params.id);
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    if (file.status !== 'ready') return res.status(400).json({ message: 'File is still being processed' });
+
+    const raw = await askClaude(file.rawText, file.tablesCsv, query);
+    let data;
     try {
-      const items = await ExtractedContract.find().populate({path: 'UserId contractId'});
-      res.json(items);
-    } catch (error) {
-      console.error('Error fetching user history:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      data = JSON.parse(raw);
+    } catch {
+      data = { answer: raw };
     }
-  });
+    res.json({ query, data });
+  } catch (err) {
+    console.error('query error:', err && err.message);
+    res.status(500).json({ message: 'Failed to generate answer' });
+  }
+});
 
-  const s3 = new AWS.S3({
-    region: process.env.AWS_REGION,
-    ...(process.env.AWS_ACCESS_KEY && {
-      accessKeyId: process.env.AWS_ACCESS_KEY,
-      secretAccessKey: process.env.AWS_ACCESS_SECRETKEY,
-    }),
-  });
-  
-  const S3Upload = async (file,fileContent) => {
-    const params = {
-      Key: `${file.originalname}`,
-      Bucket: process.env.AWS_BUCKET_NAME,
-      ContentType: file.mimetype,
-      Body: fileContent,
-    };
-    return await s3.upload(params).promise();
-  };
+// Save a generated table
+app.post('/api/files/:id/tables', async (req, res) => {
+  try {
+    const { query, data } = req.body;
+    const file = await File.findById(req.params.id);
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    const table = await TableResult.create({ fileId: file._id, userId: file.userId, query, data });
+    res.status(201).json(table);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
-  app.post('/api/upload', upload.single('file'), async (req, res) => {
-    try {
-      const filePath = req.file.path;
-      const fileContent = fs.readFileSync(filePath);
-      const {contractId,userId} = req.body;
-      const contr = await Contract.findById(contractId);
-      console.log("before S3 upload");
-      const fC = await S3Upload(req.file,fileContent);
-      console.log("after S3 upload");
-      const fileS3Url = fC.Location;
-      console.log(contr.prompt);
-      const result = await extract_text_from_pdf(filePath); // Call function to extract text from PDF
-      const extractedData = await extract_results(contr.prompt);
-      const extractedContractData = new ExtractedContract({
-        data:extractedData,
-        contractId:contractId,
-        UserId:userId,
-        fileS3Url:fileS3Url,
-        fileName:req.file.originalname,
-      });
-      await extractedContractData.save();
-      res.status(201).json({message:"uploaded sucessfulluy",extractedData:extractedContractData}); 
+// List saved tables for a file
+app.get('/api/files/:id/tables', async (req, res) => {
+  try {
+    const tables = await TableResult.find({ fileId: req.params.id }).sort({ createdAt: -1 });
+    res.json(tables);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete a saved table
+app.delete('/api/files/:id/tables/:tableId', async (req, res) => {
+  try {
+    await TableResult.findByIdAndDelete(req.params.tableId);
+    res.json({ message: 'Table deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete a file (+ its tables + S3 object)
+app.delete('/api/files/:id', async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id);
+    if (file) {
+      try {
+        await s3.deleteObject({ Bucket: BUCKET, Key: file.s3Key }).promise();
+      } catch (e) {
+        console.error('s3 delete failed:', e && e.message);
+      }
+      await TableResult.deleteMany({ fileId: file._id });
+      await File.findByIdAndDelete(file._id);
     }
-    catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
-  });
-  const PORT = process.env.PORT || 9000;
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+    res.json({ message: 'File deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
+// SPA fallback — serve the built UI for any non-/api route
+app.get(/^\/(?!api).*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-  app.get('/api/history/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      console.log(id);
-      let items = await ExtractedContract.find().populate({ path: 'contractId' });
-      items = items.filter(item => String(item.UserId) === id);
-      console.log(items);
-      res.json(items);
-    } catch (error) {
-      console.error('Error fetching user history:', error);
-      res.status(500).json({ message: 'Internal server error' });
-    }
-  });
- 
-  
-  app.get('/api/dashboardcontracts', async (req, res) => {
-    try {
-      const totalContracts = await Contract.countDocuments();
-      const totalExtractedContracts = await ExtractedContract.countDocuments();
-  
-      const contracts = await Contract.find().lean(); // Retrieve all contracts
-  
-      // Fetch the count of extracted contracts for each contract
-      const contractsWithCount = await Promise.all(contracts.map(async (contract) => {
-        const extractedContractCount = await ExtractedContract.countDocuments({ contractId: contract._id });
-        return {
-          contractId: contract._id,
-          contractName: contract.name,
-          documentsUploaded: extractedContractCount
-        };
-      }));
-  
-      res.json({
-        totalContracts: totalContracts,
-        totalDocumentsUploaded: totalExtractedContracts,
-        contracts: contractsWithCount
-      });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Server Error' });
-    }
-  });
-
-  app.get(/^\/(?!api).*/, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  });
+const PORT = process.env.PORT || 9000;
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
