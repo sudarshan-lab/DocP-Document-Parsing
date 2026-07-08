@@ -72,9 +72,9 @@ function Seg({
       onClick={onClick}
       className="btn btn-sm"
       style={{
-        boxShadow: active ? "var(--neu-in-sm)" : "none",
-        color: active ? "var(--accent-2)" : "var(--text-dim)",
-        background: "transparent",
+        background: active ? "var(--surface)" : "transparent",
+        border: active ? "1px solid var(--border)" : "1px solid transparent",
+        color: active ? "var(--fg)" : "var(--muted)",
       }}
     >
       {children}

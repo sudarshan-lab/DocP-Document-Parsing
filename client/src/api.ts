@@ -25,6 +25,15 @@ export interface FileItem {
   summary?: string;
   keyFacts?: { label: string; value: any }[];
   suggestedQuestions?: string[];
+  tags?: string[];
+}
+
+export interface SavedTableItem {
+  _id: string;
+  query: string;
+  data: any;
+  createdAt: string;
+  fileId: { _id: string; fileName: string } | null;
 }
 
 export interface TableResultItem {
@@ -81,5 +90,11 @@ export const deleteTable = (fileId: string, tableId: string) =>
 
 export const deleteFile = (id: string) =>
   api.delete(`/api/files/${id}`).then((r) => r.data);
+
+export const updateFile = (id: string, patch: { fileName?: string; tags?: string[] }) =>
+  api.patch(`/api/files/${id}`, patch).then((r) => r.data as FileItem);
+
+export const listAllTables = (userId: string) =>
+  api.get("/api/tables", { params: { userId } }).then((r) => r.data as SavedTableItem[]);
 
 export default api;

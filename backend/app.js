@@ -314,6 +314,38 @@ app.get('/api/files/:id', async (req, res) => {
   }
 });
 
+// Rename a file and/or update its tags
+app.patch('/api/files/:id', async (req, res) => {
+  try {
+    const { fileName, tags } = req.body;
+    const update = {};
+    if (typeof fileName === 'string' && fileName.trim()) update.fileName = fileName.trim();
+    if (Array.isArray(tags)) update.tags = tags.map((t) => String(t).trim()).filter(Boolean);
+    const file = await File.findByIdAndUpdate(req.params.id, update, { new: true }).select(
+      '-rawText -tablesCsv'
+    );
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    res.json(file);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// All saved tables for a user (across documents)
+app.get('/api/tables', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const tables = await TableResult.find(userId ? { userId } : {})
+      .populate({ path: 'fileId', select: 'fileName' })
+      .sort({ createdAt: -1 });
+    res.json(tables);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Generate a table for a query — NOT saved (returned for the user to confirm/keep)
 app.post('/api/files/:id/query', async (req, res) => {
   try {

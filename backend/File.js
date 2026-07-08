@@ -15,6 +15,7 @@ const fileSchema = new mongoose.Schema(
     summary: { type: String, default: '' },
     keyFacts: { type: mongoose.Schema.Types.Mixed, default: [] },
     suggestedQuestions: { type: [String], default: [] },
+    tags: { type: [String], default: [] },
     error: { type: String, default: '' },
   },
   { timestamps: true }

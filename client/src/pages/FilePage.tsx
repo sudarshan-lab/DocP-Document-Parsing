@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { message } from "antd";
 import dayjs from "dayjs";
 import AppShell from "../components/AppShell";
 import Chatbot from "../components/Chatbot";
 import ResultView from "../components/ResultView";
 import LoadingMessages from "../components/LoadingMessages";
-import { getFile, deleteTable, FileItem, TableResultItem } from "../api";
+import {
+  getFile,
+  deleteTable,
+  deleteFile,
+  updateFile,
+  FileItem,
+  TableResultItem,
+} from "../api";
+
+type Tab = "chat" | "tables" | "document";
 
 export default function FilePage() {
   const { id } = useParams();
@@ -18,8 +26,11 @@ export default function FilePage() {
     tables: TableResultItem[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [tab, setTab] = useState<Tab>("chat");
   const [modal, setModal] = useState<TableResultItem | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
 
   const load = useCallback(() => {
     if (!id) return;
@@ -36,7 +47,7 @@ export default function FilePage() {
   if (loading || !state)
     return (
       <AppShell>
-        <div className="glass" style={{ padding: 40 }}>
+        <div className="card" style={{ padding: 40 }}>
           <LoadingMessages />
         </div>
       </AppShell>
@@ -44,8 +55,28 @@ export default function FilePage() {
 
   const { file, viewUrl, tables } = state;
   const isPdf =
-    (file.mimeType || "").includes("pdf") ||
-    file.fileName.toLowerCase().endsWith(".pdf");
+    (file.mimeType || "").includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
+  const tags = file.tags || [];
+
+  const patch = async (p: { fileName?: string; tags?: string[] }) => {
+    try {
+      await updateFile(file._id, p);
+      await load();
+    } catch {
+      message.error("Could not save changes");
+    }
+  };
+  const saveName = async () => {
+    const v = nameDraft.trim();
+    setRenaming(false);
+    if (v && v !== file.fileName) await patch({ fileName: v });
+  };
+  const addTag = async () => {
+    const v = tagDraft.trim();
+    setTagDraft("");
+    if (v && !tags.includes(v)) await patch({ tags: [...tags, v] });
+  };
+  const removeTag = (t: string) => patch({ tags: tags.filter((x) => x !== t) });
 
   const removeTable = async (t: TableResultItem) => {
     try {
@@ -56,190 +87,204 @@ export default function FilePage() {
       message.error("Could not delete");
     }
   };
+  const removeDoc = async () => {
+    if (!window.confirm(`Delete "${file.fileName}" and its saved tables?`)) return;
+    try {
+      await deleteFile(file._id);
+      nav("/documents");
+    } catch {
+      message.error("Could not delete");
+    }
+  };
 
   return (
     <AppShell>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 18,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-sm" onClick={() => nav("/")}>
-            ← Back
-          </button>
-          <h2 style={{ margin: 0 }}>{file.fileName}</h2>
-        </div>
-        {!chatOpen && (
-          <button className="btn btn-primary" onClick={() => setChatOpen(true)}>
-            💬 Open chat
-          </button>
-        )}
-      </div>
-
-      {(file.summary || (file.keyFacts && file.keyFacts.length > 0)) && (
-        <div className="glass" style={{ padding: 20, marginBottom: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 18 }}>✨</span>
-            <strong style={{ fontSize: 16 }}>AI overview</strong>
-          </div>
-          {file.summary && (
-            <p style={{ color: "var(--text-dim)", margin: "0 0 14px", lineHeight: 1.6 }}>
-              {file.summary}
-            </p>
-          )}
-          {file.keyFacts && file.keyFacts.length > 0 && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
-                gap: 12,
+      {/* header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+        <button className="btn btn-sm" onClick={() => nav("/documents")}>
+          ← Documents
+        </button>
+        {renaming ? (
+          <span style={{ display: "flex", gap: 6, flex: 1, minWidth: 200 }}>
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveName()}
+              style={{ height: 30 }}
+            />
+            <button className="btn btn-sm btn-primary" onClick={saveName}>Save</button>
+            <button className="btn btn-sm" onClick={() => setRenaming(false)}>Cancel</button>
+          </span>
+        ) : (
+          <>
+            <h2 style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {file.fileName}
+            </h2>
+            <button
+              className="btn btn-sm btn-ghost"
+              title="Rename"
+              onClick={() => {
+                setNameDraft(file.fileName);
+                setRenaming(true);
               }}
             >
-              {file.keyFacts.map((f: any, i: number) => (
-                <div key={i} className="neu-inset" style={{ padding: "10px 14px" }}>
-                  <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
-                    {f?.label ?? ""}
-                  </div>
-                  <div style={{ fontWeight: 600, marginTop: 3 }}>
-                    {typeof f?.value === "object" ? JSON.stringify(f?.value) : String(f?.value ?? "")}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="file-grid">
-        {/* viewer */}
-        <div className="glass file-viewer" style={{ padding: 12, overflow: "hidden" }}>
-          {isPdf ? (
-            <iframe
-              title="document"
-              src={viewUrl}
-              style={{
-                width: "100%",
-                height: "100%",
-                border: "none",
-                borderRadius: 12,
-                background: "#fff",
-              }}
-            />
-          ) : (
-            <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center" }}>
-              <img src={viewUrl} alt={file.fileName} style={{ maxWidth: "100%", borderRadius: 12 }} />
-            </div>
-          )}
-        </div>
-
-        {/* saved tables */}
-        <div>
-          <h3 style={{ marginTop: 0 }}>
-            Saved tables{" "}
-            <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>
-              ({tables.length})
-            </span>
-          </h3>
-          {tables.length === 0 ? (
-            <div className="glass" style={{ padding: 22, color: "var(--text-dim)" }}>
-              No saved tables yet. Ask a question in the chat, then hit{" "}
-              <strong>Save to DB</strong> on answers you want to keep.
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 12 }}>
-              {tables.map((t) => (
-                <div
-                  key={t._id}
-                  className="glass"
-                  style={{ padding: 14, cursor: "pointer" }}
-                  onClick={() => setModal(t)}
-                >
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      marginBottom: 4,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {t.query}
-                  </div>
-                  <div style={{ color: "var(--text-faint)", fontSize: 12 }}>
-                    {dayjs(t.createdAt).format("MMM D, h:mm A")} · click to view
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+              ✎
+            </button>
+          </>
+        )}
+        <span
+          className={
+            "badge " + (file.status === "ready" ? "ready" : file.status === "failed" ? "failed" : "processing")
+          }
+        >
+          <span className="dot" /> {file.status}
+        </span>
+        <button className="btn btn-sm btn-danger" style={{ marginLeft: "auto" }} onClick={removeDoc}>
+          Delete
+        </button>
+      </div>
+      <div className="faint" style={{ fontSize: 12, marginBottom: 18 }}>
+        Uploaded {dayjs(file.createdAt).format("MMM D, YYYY · h:mm A")}
       </div>
 
-      {chatOpen && (
-        <Chatbot
-          fileId={file._id}
-          fileName={file.fileName}
-          onClose={() => setChatOpen(false)}
-          onSaved={load}
-          suggestions={file.suggestedQuestions}
-        />
-      )}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 300px", gap: 22 }} className="fp-grid">
+        {/* main */}
+        <div style={{ minWidth: 0 }}>
+          <div className="tabs">
+            <button className={"tab" + (tab === "chat" ? " active" : "")} onClick={() => setTab("chat")}>
+              💬 Chat
+            </button>
+            <button className={"tab" + (tab === "tables" ? " active" : "")} onClick={() => setTab("tables")}>
+              ▦ Saved tables <span className="label" style={{ marginLeft: 2 }}>{tables.length}</span>
+            </button>
+            <button className={"tab" + (tab === "document" ? " active" : "")} onClick={() => setTab("document")}>
+              📄 Document
+            </button>
+          </div>
+
+          {tab === "chat" && (
+            <Chatbot
+              fileId={file._id}
+              fileName={file.fileName}
+              onSaved={load}
+              suggestions={file.suggestedQuestions}
+              height="72vh"
+            />
+          )}
+
+          {tab === "tables" &&
+            (tables.length === 0 ? (
+              <div className="card" style={{ padding: 26, color: "var(--muted)" }}>
+                No saved tables yet. Ask a question in <strong>Chat</strong>, then hit{" "}
+                <strong>Save to DB</strong> on answers worth keeping.
+              </div>
+            ) : (
+              <div className="list">
+                {tables.map((t) => (
+                  <div key={t._id} className="row clickable" onClick={() => setModal(t)}>
+                    <span>▦</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {t.query}
+                      </div>
+                      <div className="faint" style={{ fontSize: 12 }}>
+                        {dayjs(t.createdAt).format("MMM D, h:mm A")}
+                      </div>
+                    </div>
+                    <span className="faint" style={{ fontSize: 12 }}>view →</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {tab === "document" && (
+            <div className="card" style={{ padding: 10, height: "72vh", overflow: "hidden" }}>
+              {isPdf ? (
+                <iframe
+                  title="document"
+                  src={viewUrl}
+                  style={{ width: "100%", height: "100%", border: "none", borderRadius: 6, background: "#fff" }}
+                />
+              ) : (
+                <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center" }}>
+                  <img src={viewUrl} alt={file.fileName} style={{ maxWidth: "100%", borderRadius: 6 }} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* about sidebar */}
+        <aside style={{ minWidth: 0 }}>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card-header">About</div>
+            <div style={{ padding: 14 }}>
+              {file.summary ? (
+                <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: 13, lineHeight: 1.6 }}>
+                  {file.summary}
+                </p>
+              ) : (
+                <p className="faint" style={{ margin: "0 0 12px", fontSize: 13 }}>No summary available.</p>
+              )}
+
+              {file.keyFacts && file.keyFacts.length > 0 && (
+                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                  {file.keyFacts.map((f: any, i: number) => (
+                    <div key={i} className="inset" style={{ padding: "8px 10px" }}>
+                      <div className="faint" style={{ fontSize: 11 }}>{f?.label ?? ""}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>
+                        {typeof f?.value === "object" ? JSON.stringify(f?.value) : String(f?.value ?? "")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="faint" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", margin: "4px 0 6px" }}>
+                Tags
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                {tags.length === 0 && <span className="faint" style={{ fontSize: 12 }}>None yet</span>}
+                {tags.map((t) => (
+                  <span key={t} className="label" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                    {t}
+                    <span style={{ cursor: "pointer" }} onClick={() => removeTag(t)}>
+                      ✕
+                    </span>
+                  </span>
+                ))}
+              </div>
+              <input
+                placeholder="Add a tag + Enter"
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addTag()}
+                style={{ height: 28, fontSize: 13 }}
+              />
+            </div>
+          </div>
+        </aside>
+      </div>
 
       {modal && (
-        <motion.div
+        <div
           onClick={() => setModal(null)}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(3,7,18,0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 1100,
-            display: "grid",
-            placeItems: "center",
-            padding: 24,
-          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(1,4,9,0.7)", zIndex: 100, display: "grid", placeItems: "center", padding: 24 }}
         >
-          <motion.div
-            className="glass-strong"
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.18 }}
-            style={{ padding: 22, maxWidth: 900, width: "100%", maxHeight: "85vh", overflow: "auto" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "start",
-                gap: 12,
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <div style={{ color: "var(--text-dim)", fontSize: 13 }}>Query</div>
-                <div style={{ fontWeight: 600, fontSize: 17 }}>{modal.query}</div>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-sm btn-danger" onClick={() => removeTable(modal)}>
-                  Delete
-                </button>
-                <button className="btn btn-sm" onClick={() => setModal(null)}>
-                  Close
-                </button>
-              </div>
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900, width: "100%", maxHeight: "85vh", overflow: "auto" }}>
+            <div className="card-header">
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{modal.query}</span>
+              <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button className="btn btn-sm btn-danger" onClick={() => removeTable(modal)}>Delete</button>
+                <button className="btn btn-sm" onClick={() => setModal(null)}>Close</button>
+              </span>
             </div>
-            <ResultView data={modal.data} />
-          </motion.div>
-        </motion.div>
+            <div style={{ padding: 16 }}>
+              <ResultView data={modal.data} />
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );

@@ -1,7 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import Dashboard from "./pages/Dashboard";
+import Overview from "./pages/Overview";
+import Documents from "./pages/Documents";
+import Tables from "./pages/Tables";
+import Settings from "./pages/Settings";
 import FilePage from "./pages/FilePage";
 import { isAuthed } from "./auth";
 
@@ -15,22 +18,11 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route
-          path="/"
-          element={
-            <Protected>
-              <Dashboard />
-            </Protected>
-          }
-        />
-        <Route
-          path="/files/:id"
-          element={
-            <Protected>
-              <FilePage />
-            </Protected>
-          }
-        />
+        <Route path="/" element={<Protected><Overview /></Protected>} />
+        <Route path="/documents" element={<Protected><Documents /></Protected>} />
+        <Route path="/tables" element={<Protected><Tables /></Protected>} />
+        <Route path="/settings" element={<Protected><Settings /></Protected>} />
+        <Route path="/files/:id" element={<Protected><FilePage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
