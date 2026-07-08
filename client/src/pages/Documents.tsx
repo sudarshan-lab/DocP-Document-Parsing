@@ -63,6 +63,9 @@ export default function Documents() {
       "image/png": [".png"],
       "image/jpeg": [".jpg", ".jpeg"],
       "image/tiff": [".tif", ".tiff"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "text/plain": [".txt", ".md"],
+      "text/csv": [".csv"],
     },
   });
 

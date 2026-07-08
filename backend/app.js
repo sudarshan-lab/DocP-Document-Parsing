@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const express = require('express');
 const multer = require('multer');
+const mammoth = require('mammoth');
 const path = require('path');
 
 require('./connection');
@@ -141,10 +142,41 @@ async function runTextract(s3Key) {
   return { rawText: lines.join('\n'), tablesCsv };
 }
 
+async function s3GetBuffer(key) {
+  const obj = await s3.getObject({ Bucket: BUCKET, Key: key }).promise();
+  return obj.Body;
+}
+
+// Pick an extractor by file type:
+//   - PDF / PNG / JPG / TIFF  -> AWS Textract (text + detected tables)
+//   - Word .docx              -> mammoth (raw text)
+//   - .txt / .md / .csv       -> read the bytes directly
+async function extractContent({ s3Key, mimeType, fileName, buffer }) {
+  const name = (fileName || '').toLowerCase();
+  const type = mimeType || '';
+  const isDocx = name.endsWith('.docx') || type.includes('wordprocessingml');
+  const isText =
+    name.endsWith('.txt') ||
+    name.endsWith('.md') ||
+    name.endsWith('.csv') ||
+    type.startsWith('text/');
+
+  if (isDocx) {
+    const buf = buffer || (await s3GetBuffer(s3Key));
+    const { value } = await mammoth.extractRawText({ buffer: buf });
+    return { rawText: value || '', tablesCsv: '' };
+  }
+  if (isText) {
+    const buf = buffer || (await s3GetBuffer(s3Key));
+    return { rawText: buf.toString('utf8'), tablesCsv: '' };
+  }
+  return runTextract(s3Key);
+}
+
 // Runs in the background after upload; updates the File doc when done.
-async function processFile(fileId, s3Key) {
+async function processFile(fileId, meta) {
   try {
-    const { rawText, tablesCsv } = await runTextract(s3Key);
+    const { rawText, tablesCsv } = await extractContent(meta);
     const overview = await generateOverview(rawText, tablesCsv).catch(() => ({}));
     await File.findByIdAndUpdate(fileId, {
       rawText,
@@ -279,7 +311,13 @@ app.post('/api/files', upload.single('file'), async (req, res) => {
     });
 
     res.status(201).json({ fileId: fileDoc._id, status: 'processing' });
-    processFile(fileDoc._id, s3Key); // fire-and-forget
+    // fire-and-forget; pass the buffer so docx/text avoid a re-download
+    processFile(fileDoc._id, {
+      s3Key,
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname,
+      buffer: req.file.buffer,
+    });
   } catch (err) {
     console.error('upload error:', err && err.message);
     res.status(500).json({ message: 'Upload failed' });

@@ -56,6 +56,9 @@ export default function FilePage() {
   const { file, viewUrl, tables } = state;
   const isPdf =
     (file.mimeType || "").includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
+  const isImage =
+    (file.mimeType || "").startsWith("image/") ||
+    /\.(png|jpe?g|tiff?)$/i.test(file.fileName);
   const tags = file.tags || [];
 
   const patch = async (p: { fileName?: string; tags?: string[] }) => {
@@ -206,9 +209,21 @@ export default function FilePage() {
                   src={viewUrl}
                   style={{ width: "100%", height: "100%", border: "none", borderRadius: 6, background: "#fff" }}
                 />
-              ) : (
+              ) : isImage ? (
                 <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center" }}>
                   <img src={viewUrl} alt={file.fileName} style={{ maxWidth: "100%", borderRadius: 6 }} />
+                </div>
+              ) : (
+                <div style={{ height: "100%", display: "grid", placeItems: "center", textAlign: "center", padding: 24 }}>
+                  <div>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
+                    <div className="muted" style={{ marginBottom: 12 }}>
+                      Inline preview isn't available for this file type.
+                    </div>
+                    <a className="btn" href={viewUrl} target="_blank" rel="noreferrer">
+                      ⬇ Download original
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
