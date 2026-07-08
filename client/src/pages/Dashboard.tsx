@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
+import { motion } from "framer-motion";
 import { message } from "antd";
 import dayjs from "dayjs";
 import AppShell from "../components/AppShell";
@@ -141,11 +142,15 @@ export default function Dashboard() {
             gap: 16,
           }}
         >
-          {files.map((f) => (
-            <div
+          {files.map((f, i) => (
+            <motion.div
               key={f._id}
               className="glass"
               onClick={() => f.status === "ready" && nav(`/files/${f._id}`)}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(i * 0.04, 0.4) }}
+              whileHover={f.status === "ready" ? { y: -4 } : undefined}
               style={{
                 padding: 18,
                 cursor: f.status === "ready" ? "pointer" : "default",
@@ -153,13 +158,7 @@ export default function Dashboard() {
                 flexDirection: "column",
                 gap: 12,
                 minHeight: 130,
-                transition: "transform 0.15s ease",
               }}
-              onMouseEnter={(e) =>
-                f.status === "ready" &&
-                (e.currentTarget.style.transform = "translateY(-3px)")
-              }
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ fontSize: 26 }}>📄</div>
@@ -206,7 +205,7 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}

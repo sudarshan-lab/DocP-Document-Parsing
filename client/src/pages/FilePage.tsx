@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { message } from "antd";
 import dayjs from "dayjs";
 import AppShell from "../components/AppShell";
@@ -81,16 +82,9 @@ export default function FilePage() {
         )}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
-          gap: 18,
-          alignItems: "start",
-        }}
-      >
+      <div className="file-grid">
         {/* viewer */}
-        <div className="glass" style={{ padding: 12, height: "78vh", overflow: "hidden" }}>
+        <div className="glass file-viewer" style={{ padding: 12, overflow: "hidden" }}>
           {isPdf ? (
             <iframe
               title="document"
@@ -163,8 +157,10 @@ export default function FilePage() {
       )}
 
       {modal && (
-        <div
+        <motion.div
           onClick={() => setModal(null)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           style={{
             position: "fixed",
             inset: 0,
@@ -176,9 +172,12 @@ export default function FilePage() {
             padding: 24,
           }}
         >
-          <div
+          <motion.div
             className="glass-strong"
             onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.18 }}
             style={{ padding: 22, maxWidth: 900, width: "100%", maxHeight: "85vh", overflow: "auto" }}
           >
             <div
@@ -204,8 +203,8 @@ export default function FilePage() {
               </div>
             </div>
             <TableView data={modal.data} />
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
     </AppShell>
   );

@@ -324,3 +324,22 @@ a {
     transform: rotate(360deg);
   }
 }
+
+/* File page layout (stacks on narrow screens) */
+.file-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.file-viewer {
+  height: 78vh;
+}
+@media (max-width: 900px) {
+  .file-grid {
+    grid-template-columns: 1fr;
+  }
+  .file-viewer {
+    height: 56vh;
+  }
+}

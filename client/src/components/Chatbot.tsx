@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
+import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { message } from "antd";
@@ -143,8 +144,11 @@ export default function Chatbot({
       disableDragging={expanded}
       style={{ zIndex: 1000 }}
     >
-      <div
+      <motion.div
         className="glass-strong"
+        initial={{ opacity: 0, scale: 0.94 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
         style={{
           height: "100%",
           display: "flex",
@@ -349,7 +353,7 @@ export default function Chatbot({
             Ask
           </button>
         </div>
-      </div>
+      </motion.div>
     </Rnd>
   );
 }
