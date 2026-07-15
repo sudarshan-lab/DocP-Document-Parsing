@@ -4,7 +4,8 @@ import remarkGfm from "remark-gfm";
 import { message } from "antd";
 import ResultView from "./ResultView";
 import LoadingMessages from "./LoadingMessages";
-import { queryFile, saveTable } from "../api";
+import { queryFile, queryFiles, saveTable, saveMultiTable } from "../api";
+import { getUser } from "../auth";
 
 type Msg =
   | { id: string; role: "hint"; text: string }
@@ -36,21 +37,30 @@ function renderData(data: any) {
 export default function Chatbot({
   fileId,
   fileName,
+  fileIds,
+  sourceLabel,
   onSaved,
   suggestions,
   height,
 }: {
-  fileId: string;
-  fileName: string;
+  fileId?: string;
+  fileName?: string;
+  fileIds?: string[];
+  sourceLabel?: string;
   onSaved: () => void;
   suggestions?: string[];
   height?: number | string;
 }) {
+  const user = getUser();
+  const multi = Array.isArray(fileIds) && fileIds.length > 0;
+  const label = multi ? sourceLabel || `${fileIds!.length} files` : fileName || "this document";
   const [msgs, setMsgs] = useState<Msg[]>([
     {
       id: uid(),
       role: "hint",
-      text: `Ask anything about “${fileName}”. I'll turn the answer into a table you can save — and confirm each question before running it.`,
+      text: multi
+        ? `Ask across these ${fileIds!.length} files — totals, comparisons, counts. I'll confirm each question, then you can save the answer as a table.`
+        : `Ask anything about “${label}”. I'll turn the answer into a table you can save — and confirm each question before running it.`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -79,7 +89,9 @@ export default function Chatbot({
     );
     setBusy(true);
     try {
-      const { data } = await queryFile(fileId, query);
+      const { data } = multi
+        ? await queryFiles(fileIds!, query)
+        : await queryFile(fileId!, query);
       setMsgs((m) => [...m, { id: uid(), role: "assistant", query, data, saved: false }]);
     } catch (e: any) {
       setMsgs((m) => [
@@ -93,7 +105,11 @@ export default function Chatbot({
 
   const save = async (msgId: string, query: string, data: any) => {
     try {
-      await saveTable(fileId, query, data);
+      if (multi) {
+        await saveMultiTable({ userId: user!._id, query, data, fileIds: fileIds!, sourceLabel: label });
+      } else {
+        await saveTable(fileId!, query, data);
+      }
       setMsgs((m) => m.map((x) => (x.id === msgId ? ({ ...x, saved: true } as Msg) : x)));
       message.success("Saved");
       onSaved();
@@ -118,7 +134,7 @@ export default function Chatbot({
       <div className="card-header">
         <span>💬 Assistant</span>
         <span className="faint" style={{ fontWeight: 400, fontSize: 12 }}>
-          confirms before each query
+          {multi ? `across ${fileIds!.length} files` : "confirms before each query"}
         </span>
       </div>
 

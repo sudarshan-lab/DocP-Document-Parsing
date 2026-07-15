@@ -21,12 +21,8 @@ export default function Tables() {
   }, []);
 
   const del = async (t: SavedTableItem) => {
-    if (!t.fileId) {
-      setModal(null);
-      return;
-    }
     try {
-      await deleteTable(t.fileId._id, t._id);
+      await deleteTable(t._id);
       setModal(null);
       load();
     } catch {
@@ -34,10 +30,11 @@ export default function Tables() {
     }
   };
 
+  const srcOf = (t: SavedTableItem) => t.sourceLabel || t.fileId?.fileName || "—";
   const visible = tables.filter(
     (t) =>
       t.query.toLowerCase().includes(q.toLowerCase()) ||
-      (t.fileId?.fileName || "").toLowerCase().includes(q.toLowerCase())
+      srcOf(t).toLowerCase().includes(q.toLowerCase())
   );
 
   return (
@@ -64,7 +61,7 @@ export default function Tables() {
                   {t.query}
                 </div>
                 <div className="faint" style={{ fontSize: 12 }}>
-                  {t.fileId?.fileName || "—"} · {dayjs(t.createdAt).format("MMM D, h:mm A")}
+                  {srcOf(t)} · {dayjs(t.createdAt).format("MMM D, h:mm A")}
                 </div>
               </div>
               {t.fileId && (

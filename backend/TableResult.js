@@ -1,10 +1,13 @@
 const mongoose = require('mongoose');
 
-// A saved tabular answer for a file. One file can have many of these, each tied
-// to the chat query that produced it. Only created when the user hits "Save".
+// A saved tabular answer. It can come from a single file (fileId) or from a
+// multi-file query (fileIds + a human label). Only created when the user hits
+// "Save".
 const tableResultSchema = new mongoose.Schema(
   {
-    fileId: { type: mongoose.Schema.Types.ObjectId, ref: 'File', required: true, index: true },
+    fileId: { type: mongoose.Schema.Types.ObjectId, ref: 'File', default: null, index: true },
+    fileIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'File' }],
+    sourceLabel: { type: String, default: '' },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     query: { type: String, required: true },
     data: { type: mongoose.Schema.Types.Mixed, required: true },

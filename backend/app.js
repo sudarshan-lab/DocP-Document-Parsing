@@ -5,10 +5,12 @@ const cors = require('cors');
 const express = require('express');
 const multer = require('multer');
 const mammoth = require('mammoth');
+const pdfParse = require('pdf-parse');
 const path = require('path');
 
 require('./connection');
 const File = require('./File');
+const Folder = require('./Folder');
 const TableResult = require('./TableResult');
 const userModel = require('./userModel');
 
@@ -48,8 +50,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ---------------------------------------------------------------------------
 function startJob(client, bucket, key) {
   return new Promise((resolve, reject) => {
-    client.startDocumentAnalysis(
-      { DocumentLocation: { S3Object: { Bucket: bucket, Name: key } }, FeatureTypes: ['TABLES'] },
+    client.startDocumentTextDetection(
+      { DocumentLocation: { S3Object: { Bucket: bucket, Name: key } } },
       (err, data) => (err ? reject(err) : resolve(data.JobId))
     );
   });
@@ -58,7 +60,7 @@ function startJob(client, bucket, key) {
 function isJobComplete(client, jobId) {
   return new Promise((resolve, reject) => {
     const check = () => {
-      client.getDocumentAnalysis({ JobId: jobId }, (err, data) => {
+      client.getDocumentTextDetection({ JobId: jobId }, (err, data) => {
         if (err) return reject(err);
         if (data.JobStatus === 'IN_PROGRESS') return setTimeout(check, 1500);
         if (data.JobStatus === 'SUCCEEDED') return resolve(data);
@@ -73,7 +75,7 @@ function getJobResults(client, jobId) {
   return new Promise((resolve, reject) => {
     const pages = [];
     const get = (nextToken) => {
-      client.getDocumentAnalysis({ JobId: jobId, NextToken: nextToken }, (err, data) => {
+      client.getDocumentTextDetection({ JobId: jobId, NextToken: nextToken }, (err, data) => {
         if (err) return reject(err);
         pages.push(data);
         if (data.NextToken) return setTimeout(() => get(data.NextToken), 500);
@@ -132,14 +134,12 @@ async function runTextract(s3Key) {
   await isJobComplete(textract, jobId);
   const pages = await getJobResults(textract, jobId);
   const lines = [];
-  let tablesCsv = '';
   for (const page of pages) {
     for (const b of page.Blocks || []) {
       if (b.BlockType === 'LINE') lines.push(b.Text);
     }
-    tablesCsv += blocksToTablesCsv(page.Blocks || []);
   }
-  return { rawText: lines.join('\n'), tablesCsv };
+  return { rawText: lines.join('\n'), tablesCsv: '' };
 }
 
 async function s3GetBuffer(key) {
@@ -170,6 +170,24 @@ async function extractContent({ s3Key, mimeType, fileName, buffer }) {
     const buf = buffer || (await s3GetBuffer(s3Key));
     return { rawText: buf.toString('utf8'), tablesCsv: '' };
   }
+
+  // PDFs: try the free local text layer first. Only fall back to Textract OCR
+  // when there's little/no extractable text (i.e. a scanned/image PDF).
+  const isPdf = name.endsWith('.pdf') || type.includes('pdf');
+  if (isPdf) {
+    try {
+      const buf = buffer || (await s3GetBuffer(s3Key));
+      const parsed = await pdfParse(buf);
+      const text = (parsed.text || '').trim();
+      const pages = parsed.numpages || 1;
+      if (text.length / pages >= 100) {
+        return { rawText: text, tablesCsv: '' };
+      }
+    } catch (e) {
+      // unreadable text layer — fall through to Textract OCR
+    }
+  }
+
   return runTextract(s3Key);
 }
 
@@ -199,17 +217,16 @@ async function processFile(fileId, meta) {
 // Claude: document text + a user question -> a single JSON object
 // ---------------------------------------------------------------------------
 async function askClaude(rawText, tablesCsv, query) {
-  const prompt = `You are given the extracted contents of a single document.
+  const prompt = `You are given the extracted contents of one or more documents. When
+multiple documents are present they are separated by lines like "===== FILE: name =====".
 
-RAW TEXT:
+CONTENT:
 ${rawText}
-
-DETECTED TABLES (CSV):
-${tablesCsv || '(none)'}
-
-Answer the user's request using ONLY the information in this document. Represent the
-answer as a single JSON object. For tabular answers use an array of objects with
-consistent keys. If the document does not contain the answer, return {"note": "..."}.
+${tablesCsv ? `\nDETECTED TABLES (CSV):\n${tablesCsv}\n` : ''}
+Answer the user's request using ONLY the information in these documents. When the request
+spans multiple documents (totals, comparisons, counts), aggregate across all of them.
+Represent the answer as a single JSON object. For tabular answers use an array of objects
+with consistent keys. If the documents do not contain the answer, return {"note": "..."}.
 
 User request: ${query}`;
 
@@ -291,33 +308,51 @@ app.post('/api/login', async (req, res) => {
 // Files
 // ===========================================================================
 // Upload -> store in S3 -> respond immediately -> parse with Textract in background
-app.post('/api/files', upload.single('file'), async (req, res) => {
+app.post('/api/files', upload.array('files', 20), async (req, res) => {
   try {
     const { userId } = req.body;
-    if (!req.file) return res.status(400).json({ message: 'No file provided' });
+    const uploaded = req.files || [];
+    if (!uploaded.length) return res.status(400).json({ message: 'No file provided' });
     if (!userId) return res.status(400).json({ message: 'userId is required' });
 
-    const s3Key = `${userId}/${Date.now()}-${req.file.originalname}`;
-    await s3
-      .upload({ Bucket: BUCKET, Key: s3Key, Body: req.file.buffer, ContentType: req.file.mimetype })
-      .promise();
+    // Attach to an existing folder if given; otherwise a single multi-file
+    // request becomes its own new folder/set (a single file stays at root).
+    let folderId = req.body.folderId || null;
+    if (!folderId && uploaded.length > 1) {
+      const name =
+        (req.body.folderName && String(req.body.folderName).trim()) ||
+        `Set · ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
+      const folder = await Folder.create({ userId, name });
+      folderId = folder._id;
+    }
 
-    const fileDoc = await File.create({
-      userId,
-      fileName: req.file.originalname,
-      s3Key,
-      mimeType: req.file.mimetype,
-      status: 'processing',
-    });
+    const created = [];
+    for (const f of uploaded) {
+      const prefix = folderId ? `${userId}/${folderId}/` : `${userId}/`;
+      const rand = Math.random().toString(36).slice(2, 7);
+      const s3Key = `${prefix}${Date.now()}-${rand}-${f.originalname}`;
+      await s3
+        .upload({ Bucket: BUCKET, Key: s3Key, Body: f.buffer, ContentType: f.mimetype })
+        .promise();
+      const fileDoc = await File.create({
+        userId,
+        folderId,
+        fileName: f.originalname,
+        s3Key,
+        mimeType: f.mimetype,
+        status: 'processing',
+      });
+      created.push({ fileId: fileDoc._id, fileName: f.originalname, status: 'processing' });
+      // fire-and-forget; pass the buffer so pdf/docx/text avoid a re-download
+      processFile(fileDoc._id, {
+        s3Key,
+        mimeType: f.mimetype,
+        fileName: f.originalname,
+        buffer: f.buffer,
+      });
+    }
 
-    res.status(201).json({ fileId: fileDoc._id, status: 'processing' });
-    // fire-and-forget; pass the buffer so docx/text avoid a re-download
-    processFile(fileDoc._id, {
-      s3Key,
-      mimeType: req.file.mimetype,
-      fileName: req.file.originalname,
-      buffer: req.file.buffer,
-    });
+    res.status(201).json({ folderId, files: created });
   } catch (err) {
     console.error('upload error:', err && err.message);
     res.status(500).json({ message: 'Upload failed' });
@@ -378,6 +413,123 @@ app.get('/api/tables', async (req, res) => {
       .populate({ path: 'fileId', select: 'fileName' })
       .sort({ createdAt: -1 });
     res.json(tables);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Create an (empty) folder to upload a set into
+app.post('/api/folders', async (req, res) => {
+  try {
+    const { userId, name } = req.body;
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+    const folder = await Folder.create({
+      userId,
+      name: (name && String(name).trim()) || `Set · ${new Date().toLocaleString()}`,
+    });
+    res.status(201).json(folder);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Folders (sets) for a user
+app.get('/api/folders', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const folders = await Folder.find(userId ? { userId } : {}).sort({ createdAt: -1 });
+    res.json(folders);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete a folder and everything under it (files + their tables + S3 objects)
+app.delete('/api/folders/:id', async (req, res) => {
+  try {
+    const files = await File.find({ folderId: req.params.id });
+    for (const file of files) {
+      try {
+        await s3.deleteObject({ Bucket: BUCKET, Key: file.s3Key }).promise();
+      } catch (e) {
+        console.error('s3 delete failed:', e && e.message);
+      }
+      await TableResult.deleteMany({ fileId: file._id });
+      await File.findByIdAndDelete(file._id);
+    }
+    await Folder.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Folder deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Query across a selection of files (multi-file). NOT saved.
+const MAX_QUERY_CHARS = 300000; // ~75k tokens budget across the selection
+app.post('/api/query', async (req, res) => {
+  try {
+    const { fileIds, query } = req.body;
+    if (!query || !String(query).trim()) return res.status(400).json({ message: 'Query is required' });
+    if (!Array.isArray(fileIds) || !fileIds.length)
+      return res.status(400).json({ message: 'Select at least one file' });
+
+    const files = await File.find({ _id: { $in: fileIds }, status: 'ready' });
+    if (!files.length) return res.status(400).json({ message: 'No ready files in the selection' });
+
+    let combined = '';
+    const skipped = [];
+    for (const f of files) {
+      const block = `\n===== FILE: ${f.fileName} =====\n${f.rawText || ''}\n`;
+      if (combined.length + block.length > MAX_QUERY_CHARS) {
+        skipped.push(f.fileName);
+        continue;
+      }
+      combined += block;
+    }
+
+    const raw = await askClaude(combined, '', query);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { answer: raw };
+    }
+    res.json({ query, data, filesUsed: files.length - skipped.length, skipped });
+  } catch (err) {
+    console.error('multi-query error:', err && err.message);
+    res.status(500).json({ message: 'Failed to generate answer' });
+  }
+});
+
+// Save a table from any query (single- or multi-file)
+app.post('/api/tables', async (req, res) => {
+  try {
+    const { userId, query, data, fileIds, sourceLabel } = req.body;
+    if (!userId || !query || typeof data === 'undefined')
+      return res.status(400).json({ message: 'Missing fields' });
+    const table = await TableResult.create({
+      userId,
+      query,
+      data,
+      fileIds: Array.isArray(fileIds) ? fileIds : [],
+      sourceLabel: sourceLabel || '',
+    });
+    res.status(201).json(table);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete any saved table by id
+app.delete('/api/tables/:tableId', async (req, res) => {
+  try {
+    await TableResult.findByIdAndDelete(req.params.tableId);
+    res.json({ message: 'Table deleted' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });

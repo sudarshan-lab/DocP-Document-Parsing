@@ -26,6 +26,13 @@ export interface FileItem {
   keyFacts?: { label: string; value: any }[];
   suggestedQuestions?: string[];
   tags?: string[];
+  folderId?: string | null;
+}
+
+export interface FolderItem {
+  _id: string;
+  name: string;
+  createdAt: string;
 }
 
 export interface SavedTableItem {
@@ -34,6 +41,8 @@ export interface SavedTableItem {
   data: any;
   createdAt: string;
   fileId: { _id: string; fileName: string } | null;
+  fileIds?: string[];
+  sourceLabel?: string;
 }
 
 export interface TableResultItem {
@@ -60,14 +69,40 @@ export const signup = (payload: {
 export const listFiles = (userId: string) =>
   api.get("/api/files", { params: { userId } }).then((r) => r.data as FileItem[]);
 
-export const uploadFile = (file: File, userId: string) => {
+// One file per request (keeps each under the Vercel proxy body limit). Pass a
+// folderId to drop it into an existing set.
+export const uploadOne = (file: File, userId: string, folderId?: string) => {
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("files", file);
   fd.append("userId", userId);
-  return api
-    .post("/api/files", fd)
-    .then((r) => r.data as { fileId: string; status: FileStatus });
+  if (folderId) fd.append("folderId", folderId);
+  return api.post("/api/files", fd).then((r) => r.data);
 };
+
+export const createFolder = (userId: string, name: string) =>
+  api.post("/api/folders", { userId, name }).then((r) => r.data as FolderItem);
+
+export const listFolders = (userId: string) =>
+  api.get("/api/folders", { params: { userId } }).then((r) => r.data as FolderItem[]);
+
+export const deleteFolder = (id: string) =>
+  api.delete(`/api/folders/${id}`).then((r) => r.data);
+
+export const queryFiles = (fileIds: string[], query: string) =>
+  api
+    .post("/api/query", { fileIds, query })
+    .then(
+      (r) =>
+        r.data as { query: string; data: any; filesUsed: number; skipped: string[] }
+    );
+
+export const saveMultiTable = (p: {
+  userId: string;
+  query: string;
+  data: any;
+  fileIds: string[];
+  sourceLabel: string;
+}) => api.post("/api/tables", p).then((r) => r.data);
 
 export const getFile = (id: string) =>
   api.get(`/api/files/${id}`).then(
@@ -85,8 +120,8 @@ export const saveTable = (id: string, query: string, data: any) =>
     .post(`/api/files/${id}/tables`, { query, data })
     .then((r) => r.data as TableResultItem);
 
-export const deleteTable = (fileId: string, tableId: string) =>
-  api.delete(`/api/files/${fileId}/tables/${tableId}`).then((r) => r.data);
+export const deleteTable = (tableId: string) =>
+  api.delete(`/api/tables/${tableId}`).then((r) => r.data);
 
 export const deleteFile = (id: string) =>
   api.delete(`/api/files/${id}`).then((r) => r.data);

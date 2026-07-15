@@ -5,6 +5,8 @@ const mongoose = require('mongoose');
 const fileSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // null = at the user's root; otherwise the file belongs to a Folder/set.
+    folderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null, index: true },
     fileName: { type: String, required: true },
     s3Key: { type: String, required: true },
     mimeType: { type: String, default: '' },

@@ -83,7 +83,7 @@ export default function FilePage() {
 
   const removeTable = async (t: TableResultItem) => {
     try {
-      await deleteTable(file._id, t._id);
+      await deleteTable(t._id);
       setModal(null);
       load();
     } catch {

@@ -93,7 +93,7 @@ export default function Overview() {
                       {t.query}
                     </div>
                     <div className="faint" style={{ fontSize: 12 }}>
-                      {t.fileId?.fileName || "—"} · {dayjs(t.createdAt).format("MMM D")}
+                      {t.sourceLabel || t.fileId?.fileName || "—"} · {dayjs(t.createdAt).format("MMM D")}
                     </div>
                   </div>
                 </div>
