@@ -62,7 +62,7 @@ export default function Tables() {
               <span>▦</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {t.query}
+                  {t.title || t.query}
                 </div>
                 <div className="faint" style={{ fontSize: 12 }}>
                   {srcOf(t)} · {dayjs(t.createdAt).format("MMM D, h:mm A")}
@@ -89,8 +89,9 @@ export default function Tables() {
         >
           <div className="card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900, width: "100%", maxHeight: "85vh", overflow: "auto" }}>
             <div className="card-header">
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{modal.query}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{modal.title || modal.query}</span>
               <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button className="btn btn-sm" onClick={() => nav(`/tables/${modal._id}`)}>Open page</button>
                 {idsOf(modal).length > 0 && (
                   <button className="btn btn-sm" onClick={() => { setChatFor(modal); setModal(null); }}>
                     Continue chat

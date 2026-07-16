@@ -676,6 +676,31 @@ app.delete('/api/tables/:tableId', async (req, res) => {
   }
 });
 
+// A single saved table (for the full-page view)
+app.get('/api/tables/:id', async (req, res) => {
+  try {
+    const table = await TableResult.findById(req.params.id);
+    if (!table) return res.status(404).json({ message: 'Table not found' });
+    res.json(table);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Rename a saved table (custom title; the original query is kept)
+app.patch('/api/tables/:id', async (req, res) => {
+  try {
+    const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const table = await TableResult.findByIdAndUpdate(req.params.id, { title }, { new: true });
+    if (!table) return res.status(404).json({ message: 'Table not found' });
+    res.json(table);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Generate a table for a query — NOT saved (returned for the user to confirm/keep)
 app.post('/api/files/:id/query', async (req, res) => {
   try {

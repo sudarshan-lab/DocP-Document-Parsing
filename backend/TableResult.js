@@ -10,6 +10,7 @@ const tableResultSchema = new mongoose.Schema(
     folderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null, index: true },
     sourceLabel: { type: String, default: '' },
     sourceFileNames: [{ type: String }],
+    title: { type: String, default: '' },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     query: { type: String, required: true },
     data: { type: mongoose.Schema.Types.Mixed, required: true },

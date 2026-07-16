@@ -54,6 +54,7 @@ export interface SavedTableItem {
   folderId?: string | null;
   sourceLabel?: string;
   sourceFileNames?: string[];
+  title?: string;
 }
 
 export interface TableResultItem {
@@ -62,6 +63,7 @@ export interface TableResultItem {
   query: string;
   data: any;
   createdAt: string;
+  title?: string;
 }
 
 export const login = (userNameorEmail: string, password: string) =>
@@ -152,5 +154,11 @@ export const updateFile = (id: string, patch: { fileName?: string; tags?: string
 
 export const listAllTables = (userId: string) =>
   api.get("/api/tables", { params: { userId } }).then((r) => r.data as SavedTableItem[]);
+
+export const getTable = (id: string) =>
+  api.get(`/api/tables/${id}`).then((r) => r.data as SavedTableItem);
+
+export const renameTable = (id: string, title: string) =>
+  api.patch(`/api/tables/${id}`, { title }).then((r) => r.data as SavedTableItem);
 
 export default api;

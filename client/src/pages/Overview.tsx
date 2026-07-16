@@ -90,7 +90,7 @@ export default function Overview() {
                   <span>▦</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {t.query}
+                      {t.title || t.query}
                     </div>
                     <div className="faint" style={{ fontSize: 12 }}>
                       {t.sourceLabel || t.fileId?.fileName || "—"} · {dayjs(t.createdAt).format("MMM D")}
