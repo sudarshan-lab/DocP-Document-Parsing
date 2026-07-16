@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { message } from "antd";
@@ -51,8 +51,10 @@ export default function Documents() {
     return () => clearInterval(t);
   }, [files, load]);
 
-  const doUpload = useCallback(
-    async (list: File[]) => {
+  // Upload a batch. With a folderId, files are added to that existing set;
+  // without one, a batch of 2+ creates a new named set (a single file → root).
+  const pushFiles = useCallback(
+    async (list: File[], folderId?: string) => {
       const valid = list.filter((f) => {
         if (f.size > MAX_MB * 1024 * 1024) {
           message.error(`"${f.name}" is over ${MAX_MB} MB — skipped`);
@@ -62,18 +64,17 @@ export default function Documents() {
       });
       if (!valid.length) return;
       try {
-        let folderId: string | undefined;
-        if (valid.length > 1) {
-          const name =
-            window.prompt(`Name this set of ${valid.length} files:`, "") || "";
+        let fid = folderId;
+        if (!fid && valid.length > 1) {
+          const name = window.prompt(`Name this set of ${valid.length} files:`, "") || "";
           const folder = await createFolder(user._id, name);
-          folderId = folder._id;
+          fid = folder._id;
         }
         for (let i = 0; i < valid.length; i++) {
           setUploading(`Uploading ${i + 1} of ${valid.length}…`);
-          await uploadOne(valid[i], user._id, folderId);
+          await uploadOne(valid[i], user._id, fid);
         }
-        message.success(valid.length > 1 ? "Set uploaded — parsing…" : "Uploaded — parsing…");
+        message.success("Uploaded — parsing your documents…");
         load();
       } catch {
         message.error("Upload failed");
@@ -83,8 +84,22 @@ export default function Documents() {
     },
     [user._id, load]
   );
+
+  // Hidden picker used by a folder's "Add" button to upload into that set.
+  const addRef = useRef<HTMLInputElement>(null);
+  const pendingFolder = useRef<string | null>(null);
+  const addToFolder = (folderId: string) => {
+    pendingFolder.current = folderId;
+    addRef.current?.click();
+  };
+  const onAddPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length && pendingFolder.current) pushFiles(files, pendingFolder.current);
+  };
+
   const { getRootProps, getInputProps, open, isDragActive } = useDropzone({
-    onDrop: (a) => a.length && doUpload(a),
+    onDrop: (a) => a.length > 0 && pushFiles(a),
     noClick: true,
     accept: {
       "application/pdf": [".pdf"],
@@ -199,6 +214,14 @@ export default function Documents() {
 
   return (
     <AppShell>
+      <input
+        ref={addRef}
+        type="file"
+        multiple
+        hidden
+        accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.docx,.txt,.md,.csv"
+        onChange={onAddPicked}
+      />
       <div {...getRootProps()} style={{ outline: isDragActive ? "2px dashed var(--accent)" : "none", outlineOffset: 6, borderRadius: 6 }}>
         <input {...getInputProps()} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
@@ -267,6 +290,16 @@ export default function Documents() {
                       </span>
                       <span className="label">{fs.length}</span>
                     </span>
+                    <button
+                      className="btn btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToFolder(folder._id);
+                      }}
+                      title="Add files to this set"
+                    >
+                      ＋ Add
+                    </button>
                     <button
                       className="btn btn-sm"
                       disabled={ids.length === 0}

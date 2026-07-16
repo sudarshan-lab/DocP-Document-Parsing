@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { message } from "antd";
 import dayjs from "dayjs";
@@ -6,16 +6,19 @@ import AppShell from "../components/AppShell";
 import Chatbot from "../components/Chatbot";
 import ResultView from "../components/ResultView";
 import LoadingMessages from "../components/LoadingMessages";
+import { getUser } from "../auth";
 import {
   getFolder,
   deleteFolder,
   deleteTable,
+  uploadOne,
   FolderItem,
   FileItem,
   SavedTableItem,
 } from "../api";
 
 type Tab = "chat" | "tables" | "files";
+const MAX_MB = 4.5;
 
 export default function FolderPage() {
   const { id } = useParams();
@@ -28,6 +31,9 @@ export default function FolderPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("chat");
   const [modal, setModal] = useState<SavedTableItem | null>(null);
+  const user = getUser()!;
+  const addRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState("");
 
   const load = useCallback(() => {
     if (!id) return;
@@ -39,6 +45,33 @@ export default function FolderPage() {
     setLoading(true);
     Promise.resolve(load()).finally(() => setLoading(false));
   }, [load]);
+  useEffect(() => {
+    if (!state?.files.some((f) => f.status === "processing")) return;
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
+  }, [state, load]);
+
+  const onAddPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []).filter((f) => {
+      if (f.size > MAX_MB * 1024 * 1024) {
+        message.error(`"${f.name}" is over ${MAX_MB} MB — skipped`);
+        return false;
+      }
+      return true;
+    });
+    e.target.value = "";
+    if (!picked.length || !id) return;
+    setUploading(`Uploading ${picked.length}…`);
+    try {
+      for (const f of picked) await uploadOne(f, user._id, id);
+      message.success("Added — parsing…");
+      load();
+    } catch {
+      message.error("Upload failed");
+    } finally {
+      setUploading("");
+    }
+  };
 
   if (loading || !state)
     return (
@@ -82,7 +115,11 @@ export default function FolderPage() {
           📁 {folder.name}
         </h2>
         <span className="label">{files.length} files</span>
-        <button className="btn btn-sm btn-danger" style={{ marginLeft: "auto" }} onClick={removeFolder}>
+        <input ref={addRef} type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.docx,.txt,.md,.csv" onChange={onAddPicked} />
+        <button className="btn btn-sm btn-primary" style={{ marginLeft: "auto" }} onClick={() => addRef.current?.click()} disabled={!!uploading}>
+          {uploading || "＋ Add files"}
+        </button>
+        <button className="btn btn-sm btn-danger" onClick={removeFolder}>
           Delete set
         </button>
       </div>
