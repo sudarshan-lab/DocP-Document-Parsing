@@ -50,42 +50,45 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ---------------------------------------------------------------------------
 // Textract: async document analysis -> raw text + CSV of detected tables
 // ---------------------------------------------------------------------------
-function startJob(client, bucket, key) {
+// mode 'text' -> DetectDocumentText (cheap OCR); mode 'analysis' -> AnalyzeDocument TABLES
+function txStart(mode, key) {
   return new Promise((resolve, reject) => {
-    client.startDocumentTextDetection(
-      { DocumentLocation: { S3Object: { Bucket: bucket, Name: key } } },
-      (err, data) => (err ? reject(err) : resolve(data.JobId))
-    );
+    const loc = { DocumentLocation: { S3Object: { Bucket: BUCKET, Name: key } } };
+    const cb = (err, data) => (err ? reject(err) : resolve(data.JobId));
+    if (mode === 'analysis') textract.startDocumentAnalysis({ ...loc, FeatureTypes: ['TABLES'] }, cb);
+    else textract.startDocumentTextDetection(loc, cb);
   });
 }
 
-function isJobComplete(client, jobId) {
+function txGet(mode, params) {
   return new Promise((resolve, reject) => {
-    const check = () => {
-      client.getDocumentTextDetection({ JobId: jobId }, (err, data) => {
-        if (err) return reject(err);
-        if (data.JobStatus === 'IN_PROGRESS') return setTimeout(check, 1500);
-        if (data.JobStatus === 'SUCCEEDED') return resolve(data);
-        reject(new Error('Textract job ' + data.JobStatus + (data.StatusMessage ? ': ' + data.StatusMessage : '')));
-      });
-    };
-    check();
+    const cb = (err, data) => (err ? reject(err) : resolve(data));
+    if (mode === 'analysis') textract.getDocumentAnalysis(params, cb);
+    else textract.getDocumentTextDetection(params, cb);
   });
 }
 
-function getJobResults(client, jobId) {
-  return new Promise((resolve, reject) => {
-    const pages = [];
-    const get = (nextToken) => {
-      client.getDocumentTextDetection({ JobId: jobId, NextToken: nextToken }, (err, data) => {
-        if (err) return reject(err);
-        pages.push(data);
-        if (data.NextToken) return setTimeout(() => get(data.NextToken), 500);
-        resolve(pages);
-      });
-    };
-    get();
-  });
+async function txComplete(mode, jobId) {
+  for (;;) {
+    const data = await txGet(mode, { JobId: jobId });
+    if (data.JobStatus === 'IN_PROGRESS') {
+      await new Promise((r) => setTimeout(r, 1500));
+      continue;
+    }
+    if (data.JobStatus === 'SUCCEEDED') return;
+    throw new Error('Textract job ' + data.JobStatus + (data.StatusMessage ? ': ' + data.StatusMessage : ''));
+  }
+}
+
+async function txResults(mode, jobId) {
+  const pages = [];
+  let token;
+  do {
+    const data = await txGet(mode, { JobId: jobId, NextToken: token });
+    pages.push(data);
+    token = data.NextToken;
+  } while (token);
+  return pages;
 }
 
 function cellText(result, blocksMap) {
@@ -131,10 +134,10 @@ function blocksToTablesCsv(blocks) {
   return tableBlocks.map((t, i) => tableToCsv(t, blocksMap, i + 1)).join('');
 }
 
-async function runTextract(s3Key) {
-  const jobId = await startJob(textract, BUCKET, s3Key);
-  await isJobComplete(textract, jobId);
-  const pages = await getJobResults(textract, jobId);
+async function runTextractMode(mode, key) {
+  const jobId = await txStart(mode, key);
+  await txComplete(mode, jobId);
+  const pages = await txResults(mode, jobId);
   const lines = [];
   for (const page of pages) {
     for (const b of page.Blocks || []) {
@@ -142,6 +145,22 @@ async function runTextract(s3Key) {
     }
   }
   return { rawText: lines.join('\n'), tablesCsv: '' };
+}
+
+// Prefer cheap OCR (DetectDocumentText). If the IAM role isn't allowed that
+// action, fall back to DocumentAnalysis (Tables), which the current policy permits.
+async function runTextract(key) {
+  try {
+    return await runTextractMode('text', key);
+  } catch (e) {
+    const denied =
+      e && (e.code === 'AccessDeniedException' || /not authorized|accessdenied/i.test(e.message || ''));
+    if (denied) {
+      console.warn('Textract OCR not permitted; falling back to DocumentAnalysis (Tables)');
+      return await runTextractMode('analysis', key);
+    }
+    throw e;
+  }
 }
 
 async function s3GetBuffer(key) {
