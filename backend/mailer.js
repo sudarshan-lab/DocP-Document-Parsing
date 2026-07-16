@@ -91,6 +91,8 @@ function noticeEmailHtml(name, heading, body) {
 async function sendOtpEmail(to, otp, name) {
   return transporter.sendMail({
     from: FROM(),
+    replyTo: process.env.SMTP_USER,
+    xMailer: false,
     to,
     subject: 'Your DocP verification code',
     text: `Your DocP verification code is ${otp}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`,
@@ -101,6 +103,8 @@ async function sendOtpEmail(to, otp, name) {
 async function send2faEnabledEmail(to, name) {
   return transporter.sendMail({
     from: FROM(),
+    replyTo: process.env.SMTP_USER,
+    xMailer: false,
     to,
     subject: 'Two-step verification is on',
     text: `Two-step verification has been enabled on your DocP account. You'll now enter a one-time code from your email each time you sign in.`,
