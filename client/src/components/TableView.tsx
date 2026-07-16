@@ -26,7 +26,7 @@ export default function TableView({ data }: { data: any }) {
         new Set(data.flatMap((r: any) => Object.keys(r)))
       );
       return (
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
@@ -51,34 +51,38 @@ export default function TableView({ data }: { data: any }) {
       );
     }
     return (
-      <table className="data-table">
-        <tbody>
-          {data.map((v, i) => (
-            <tr key={i}>
-              <td>
-                <Cell value={v} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="table-wrap">
+        <table className="data-table">
+          <tbody>
+            {data.map((v, i) => (
+              <tr key={i}>
+                <td>
+                  <Cell value={v} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 
   if (isPlainObject(data)) {
     return (
-      <table className="data-table">
-        <tbody>
-          {Object.keys(data).map((k) => (
-            <tr key={k}>
-              <th style={{ width: "34%" }}>{k}</th>
-              <td>
-                <Cell value={data[k]} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="table-wrap">
+        <table className="data-table">
+          <tbody>
+            {Object.keys(data).map((k) => (
+              <tr key={k}>
+                <th style={{ width: "34%" }}>{k}</th>
+                <td>
+                  <Cell value={data[k]} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 

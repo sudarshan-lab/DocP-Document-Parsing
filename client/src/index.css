@@ -457,13 +457,21 @@ select:focus {
 }
 
 /* --- data tables --- */
+/* wrapper owns the border + radius + horizontal scroll so collapsed row
+   borders are clipped (no lines poking past the rounded corners) */
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+  max-width: 100%;
+}
+.table-wrap + .table-wrap {
+  margin-top: 8px;
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
 }
 .data-table th,
 .data-table td {
