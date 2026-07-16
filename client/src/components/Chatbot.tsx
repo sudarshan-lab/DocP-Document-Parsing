@@ -39,6 +39,7 @@ export default function Chatbot({
   fileName,
   fileIds,
   sourceLabel,
+  folderId,
   onSaved,
   suggestions,
   height,
@@ -47,6 +48,7 @@ export default function Chatbot({
   fileName?: string;
   fileIds?: string[];
   sourceLabel?: string;
+  folderId?: string;
   onSaved: () => void;
   suggestions?: string[];
   height?: number | string;
@@ -106,7 +108,7 @@ export default function Chatbot({
   const save = async (msgId: string, query: string, data: any) => {
     try {
       if (multi) {
-        await saveMultiTable({ userId: user!._id, query, data, fileIds: fileIds!, sourceLabel: label });
+        await saveMultiTable({ userId: user!._id, query, data, fileIds: fileIds!, sourceLabel: label, folderId });
       } else {
         await saveTable(fileId!, query, data);
       }

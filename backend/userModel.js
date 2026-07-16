@@ -6,7 +6,12 @@ const schema = mongoose.Schema(
         userName: String,
         email: String,
         password: String,
-        role:String
+        role: String,
+        // Email-OTP two-step verification
+        twoFactorEnabled: { type: Boolean, default: false },
+        otp: String,
+        otpExpires: Date,
+        lastTwoFactorNudge: Date,
     },
     {timestamps: true}
 )

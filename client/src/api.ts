@@ -11,6 +11,15 @@ export interface UserInfo {
   lastName: string;
   userName: string;
   email: string;
+  twoFactorEnabled?: boolean;
+}
+
+export interface LoginResult {
+  userInfo?: UserInfo;
+  twoFactorRequired?: boolean;
+  userId?: string;
+  email?: string;
+  nudge2fa?: boolean;
 }
 
 export type FileStatus = "processing" | "ready" | "failed";
@@ -42,7 +51,9 @@ export interface SavedTableItem {
   createdAt: string;
   fileId: { _id: string; fileName: string } | null;
   fileIds?: string[];
+  folderId?: string | null;
   sourceLabel?: string;
+  sourceFileNames?: string[];
 }
 
 export interface TableResultItem {
@@ -54,9 +65,13 @@ export interface TableResultItem {
 }
 
 export const login = (userNameorEmail: string, password: string) =>
-  api
-    .post("/api/login", { userNameorEmail, password })
-    .then((r) => r.data.userInfo as UserInfo);
+  api.post("/api/login", { userNameorEmail, password }).then((r) => r.data as LoginResult);
+
+export const verifyOtp = (userId: string, otp: string) =>
+  api.post("/api/login/verify-otp", { userId, otp }).then((r) => r.data.userInfo as UserInfo);
+
+export const set2fa = (userId: string, enabled: boolean) =>
+  api.post("/api/2fa", { userId, enabled }).then((r) => r.data.userInfo as UserInfo);
 
 export const signup = (payload: {
   firstName: string;
@@ -102,7 +117,13 @@ export const saveMultiTable = (p: {
   data: any;
   fileIds: string[];
   sourceLabel: string;
+  folderId?: string;
 }) => api.post("/api/tables", p).then((r) => r.data);
+
+export const getFolder = (id: string) =>
+  api.get(`/api/folders/${id}`).then(
+    (r) => r.data as { folder: FolderItem; files: FileItem[]; tables: SavedTableItem[] }
+  );
 
 export const getFile = (id: string) =>
   api.get(`/api/files/${id}`).then(

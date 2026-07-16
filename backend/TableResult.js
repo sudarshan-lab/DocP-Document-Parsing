@@ -7,7 +7,9 @@ const tableResultSchema = new mongoose.Schema(
   {
     fileId: { type: mongoose.Schema.Types.ObjectId, ref: 'File', default: null, index: true },
     fileIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'File' }],
+    folderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null, index: true },
     sourceLabel: { type: String, default: '' },
+    sourceFileNames: [{ type: String }],
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     query: { type: String, required: true },
     data: { type: mongoose.Schema.Types.Mixed, required: true },

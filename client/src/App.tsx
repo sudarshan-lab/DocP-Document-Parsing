@@ -7,6 +7,7 @@ import Documents from "./pages/Documents";
 import Tables from "./pages/Tables";
 import Settings from "./pages/Settings";
 import FilePage from "./pages/FilePage";
+import FolderPage from "./pages/FolderPage";
 import { isAuthed } from "./auth";
 
 function Protected({ children }: { children: JSX.Element }) {
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/tables" element={<Protected><Tables /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/files/:id" element={<Protected><FilePage /></Protected>} />
+        <Route path="/folders/:id" element={<Protected><FolderPage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

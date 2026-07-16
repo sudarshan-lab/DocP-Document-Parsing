@@ -29,7 +29,7 @@ export default function Documents() {
   const [uploading, setUploading] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [ask, setAsk] = useState<{ ids: string[]; label: string } | null>(null);
+  const [ask, setAsk] = useState<{ ids: string[]; label: string; folderId?: string } | null>(null);
   const q = sp.get("q") || "";
   const setQ = (v: string) => setSp(v ? { q: v } : {}, { replace: true });
 
@@ -254,9 +254,15 @@ export default function Documents() {
                       disabled={ids.length === 0}
                       onChange={() => toggleMany(ids)}
                     />
-                    <span style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} onClick={() => toggleExpand(folder._id)}>
-                      <span className="faint">{isOpen ? "▾" : "▸"}</span>
-                      <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="faint" style={{ cursor: "pointer" }} onClick={() => toggleExpand(folder._id)}>
+                        {isOpen ? "▾" : "▸"}
+                      </span>
+                      <span
+                        style={{ fontWeight: 600, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        onClick={() => nav(`/folders/${folder._id}`)}
+                        title="Open set"
+                      >
                         📁 {folder.name}
                       </span>
                       <span className="label">{fs.length}</span>
@@ -266,7 +272,7 @@ export default function Documents() {
                       disabled={ids.length === 0}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setAsk({ ids, label: folder.name });
+                        setAsk({ ids, label: folder.name, folderId: folder._id });
                       }}
                     >
                       💬 Ask set
@@ -299,7 +305,7 @@ export default function Documents() {
               <strong>Ask · {ask.label}</strong>
               <button className="btn btn-sm" onClick={() => setAsk(null)}>Close</button>
             </div>
-            <Chatbot fileIds={ask.ids} sourceLabel={ask.label} onSaved={() => {}} height="72vh" />
+            <Chatbot fileIds={ask.ids} sourceLabel={ask.label} folderId={ask.folderId} onSaved={() => {}} height="72vh" />
           </div>
         </div>
       )}
