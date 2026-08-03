@@ -138,6 +138,14 @@ export const queryFile = (id: string, query: string) =>
     .post(`/api/files/${id}/query`, { query })
     .then((r) => r.data as { query: string; data: any });
 
+export const searchFile = (id: string, q: string) =>
+  api
+    .get(`/api/files/${id}/search`, { params: { q } })
+    .then(
+      (r) =>
+        r.data as { matches: { line: number; text: string }[]; count: number; truncated: boolean }
+    );
+
 export const saveTable = (id: string, query: string, data: any) =>
   api
     .post(`/api/files/${id}/tables`, { query, data })

@@ -701,6 +701,34 @@ app.patch('/api/tables/:id', async (req, res) => {
   }
 });
 
+// Search a document's extracted text (works for PDF/DOCX/images via rawText)
+app.get('/api/files/:id/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ matches: [], count: 0, truncated: false });
+    const file = await File.findById(req.params.id).select('rawText');
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    const lines = (file.rawText || '').split('\n');
+    const needle = q.toLowerCase();
+    const LIMIT = 200;
+    const matches = [];
+    for (let i = 0; i < lines.length && matches.length < LIMIT; i++) {
+      const line = lines[i];
+      const idx = line.toLowerCase().indexOf(needle);
+      if (idx === -1) continue;
+      const start = Math.max(0, idx - 50);
+      const end = Math.min(line.length, idx + needle.length + 80);
+      const snippet =
+        (start > 0 ? '…' : '') + line.slice(start, end).trim() + (end < line.length ? '…' : '');
+      matches.push({ line: i + 1, text: snippet });
+    }
+    res.json({ matches, count: matches.length, truncated: matches.length >= LIMIT });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Generate a table for a query — NOT saved (returned for the user to confirm/keep)
 app.post('/api/files/:id/query', async (req, res) => {
   try {

@@ -11,11 +11,37 @@ import {
   deleteTable,
   deleteFile,
   updateFile,
+  searchFile,
   FileItem,
   TableResultItem,
 } from "../api";
 
-type Tab = "chat" | "tables" | "document";
+type Tab = "chat" | "tables" | "document" | "search";
+
+// wrap occurrences of q inside text with a highlight
+function highlight(text: string, q: string) {
+  if (!q) return text;
+  const out: any[] = [];
+  const lower = text.toLowerCase();
+  const ql = q.toLowerCase();
+  let i = 0;
+  let k = 0;
+  for (;;) {
+    const idx = lower.indexOf(ql, i);
+    if (idx === -1) {
+      out.push(text.slice(i));
+      break;
+    }
+    if (idx > i) out.push(text.slice(i, idx));
+    out.push(
+      <mark key={k++} style={{ background: "var(--attention)", color: "#000", padding: "0 2px", borderRadius: 3 }}>
+        {text.slice(idx, idx + q.length)}
+      </mark>
+    );
+    i = idx + q.length;
+  }
+  return out;
+}
 
 export default function FilePage() {
   const { id } = useParams();
@@ -31,6 +57,14 @@ export default function FilePage() {
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [lastQ, setLastQ] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [results, setResults] = useState<{
+    matches: { line: number; text: string }[];
+    count: number;
+    truncated: boolean;
+  } | null>(null);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -100,6 +134,20 @@ export default function FilePage() {
     }
   };
 
+  const runSearch = async () => {
+    const q = searchQ.trim();
+    if (!q) return;
+    setSearchBusy(true);
+    setLastQ(q);
+    try {
+      setResults(await searchFile(file._id, q));
+    } catch {
+      message.error("Search failed");
+    } finally {
+      setSearchBusy(false);
+    }
+  };
+
   return (
     <AppShell>
       {/* header */}
@@ -164,6 +212,9 @@ export default function FilePage() {
             <button className={"tab" + (tab === "document" ? " active" : "")} onClick={() => setTab("document")}>
               📄 Document
             </button>
+            <button className={"tab" + (tab === "search" ? " active" : "")} onClick={() => setTab("search")}>
+              🔍 Find in doc
+            </button>
           </div>
 
           {tab === "chat" && (
@@ -224,6 +275,57 @@ export default function FilePage() {
                       ⬇ Download original
                     </a>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "search" && (
+            <div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <input
+                  placeholder={`Search inside "${file.fileName}"…`}
+                  value={searchQ}
+                  onChange={(e) => setSearchQ(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                  autoFocus
+                />
+                <button className="btn btn-primary" onClick={runSearch} disabled={!searchQ.trim() || searchBusy}>
+                  Search
+                </button>
+              </div>
+              {searchBusy ? (
+                <div className="card" style={{ padding: 16 }}>
+                  <LoadingMessages compact />
+                </div>
+              ) : results ? (
+                results.count === 0 ? (
+                  <div className="card" style={{ padding: 20, color: "var(--muted)" }}>
+                    No matches for “{lastQ}”.
+                  </div>
+                ) : (
+                  <>
+                    <div className="faint" style={{ fontSize: 13, marginBottom: 8 }}>
+                      {results.count}
+                      {results.truncated ? "+" : ""} match{results.count === 1 ? "" : "es"} for “{lastQ}”
+                    </div>
+                    <div className="list">
+                      {results.matches.map((m, i) => (
+                        <div key={i} className="row" style={{ alignItems: "flex-start" }}>
+                          <span className="faint" style={{ fontSize: 12, minWidth: 46 }}>
+                            ln {m.line}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.7 }}>
+                            {highlight(m.text, lastQ)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )
+              ) : (
+                <div className="card" style={{ padding: 20, color: "var(--muted)" }}>
+                  Type a word or phrase to find it anywhere in this document — including scanned pages and images.
                 </div>
               )}
             </div>

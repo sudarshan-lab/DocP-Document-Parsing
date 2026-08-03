@@ -30,6 +30,8 @@ export default function Documents() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ask, setAsk] = useState<{ ids: string[]; label: string; folderId?: string } | null>(null);
+  const [pending, setPending] = useState<File[] | null>(null);
+  const [setName, setSetName] = useState("");
   const q = sp.get("q") || "";
   const setQ = (v: string) => setSp(v ? { q: v } : {}, { replace: true });
 
@@ -51,28 +53,22 @@ export default function Documents() {
     return () => clearInterval(t);
   }, [files, load]);
 
-  // Upload a batch. With a folderId, files are added to that existing set;
-  // without one, a batch of 2+ creates a new named set (a single file → root).
+  const sizeOk = (f: File) => {
+    if (f.size > MAX_MB * 1024 * 1024) {
+      message.error(`"${f.name}" is over ${MAX_MB} MB — skipped`);
+      return false;
+    }
+    return true;
+  };
+
+  // Upload a batch straight into folderId (or the user's root when omitted).
   const pushFiles = useCallback(
     async (list: File[], folderId?: string) => {
-      const valid = list.filter((f) => {
-        if (f.size > MAX_MB * 1024 * 1024) {
-          message.error(`"${f.name}" is over ${MAX_MB} MB — skipped`);
-          return false;
-        }
-        return true;
-      });
-      if (!valid.length) return;
+      if (!list.length) return;
       try {
-        let fid = folderId;
-        if (!fid && valid.length > 1) {
-          const name = window.prompt(`Name this set of ${valid.length} files:`, "") || "";
-          const folder = await createFolder(user._id, name);
-          fid = folder._id;
-        }
-        for (let i = 0; i < valid.length; i++) {
-          setUploading(`Uploading ${i + 1} of ${valid.length}…`);
-          await uploadOne(valid[i], user._id, fid);
+        for (let i = 0; i < list.length; i++) {
+          setUploading(`Uploading ${i + 1} of ${list.length}…`);
+          await uploadOne(list[i], user._id, folderId);
         }
         message.success("Uploaded — parsing your documents…");
         load();
@@ -85,6 +81,33 @@ export default function Documents() {
     [user._id, load]
   );
 
+  // Main dropzone / Upload button: one file → root; several → ask whether to
+  // make a set or drop them all at root.
+  const beginUpload = (list: File[]) => {
+    const valid = list.filter(sizeOk);
+    if (!valid.length) return;
+    if (valid.length > 1) setPending(valid);
+    else pushFiles(valid);
+  };
+  const createSet = async () => {
+    const files = pending || [];
+    const name = setName.trim();
+    setPending(null);
+    setSetName("");
+    try {
+      const folder = await createFolder(user._id, name);
+      pushFiles(files, folder._id);
+    } catch {
+      message.error("Could not create the set");
+    }
+  };
+  const uploadToRoot = () => {
+    const files = pending || [];
+    setPending(null);
+    setSetName("");
+    pushFiles(files);
+  };
+
   // Hidden picker used by a folder's "Add" button to upload into that set.
   const addRef = useRef<HTMLInputElement>(null);
   const pendingFolder = useRef<string | null>(null);
@@ -93,13 +116,13 @@ export default function Documents() {
     addRef.current?.click();
   };
   const onAddPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []).filter(sizeOk);
     e.target.value = "";
     if (files.length && pendingFolder.current) pushFiles(files, pendingFolder.current);
   };
 
   const { getRootProps, getInputProps, open, isDragActive } = useDropzone({
-    onDrop: (a) => a.length > 0 && pushFiles(a),
+    onDrop: (a) => a.length > 0 && beginUpload(a),
     noClick: true,
     accept: {
       "application/pdf": [".pdf"],
@@ -327,6 +350,52 @@ export default function Documents() {
           </div>
         )}
       </div>
+
+      {pending && (
+        <div
+          onClick={() => {
+            setPending(null);
+            setSetName("");
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(1,4,9,0.7)", zIndex: 100, display: "grid", placeItems: "center", padding: 24 }}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, width: "100%" }}>
+            <div className="card-header">Upload {pending.length} files</div>
+            <div style={{ padding: 16 }}>
+              <label>Set name (optional)</label>
+              <input
+                autoFocus
+                value={setName}
+                onChange={(e) => setSetName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createSet()}
+                placeholder="e.g. 2024 Invoices"
+                style={{ marginTop: 4, marginBottom: 6 }}
+              />
+              <div className="faint" style={{ fontSize: 12, marginBottom: 14 }}>
+                Group them into a set, or skip and add them all to the root.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button className="btn btn-primary" onClick={createSet}>
+                  Create set
+                </button>
+                <button className="btn" onClick={uploadToRoot}>
+                  Upload to root
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  style={{ marginLeft: "auto" }}
+                  onClick={() => {
+                    setPending(null);
+                    setSetName("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {ask && (
         <div
