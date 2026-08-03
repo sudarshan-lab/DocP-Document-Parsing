@@ -12,6 +12,7 @@ require('./connection');
 const File = require('./File');
 const Folder = require('./Folder');
 const TableResult = require('./TableResult');
+const SavedPrompt = require('./SavedPrompt');
 const userModel = require('./userModel');
 const bcrypt = require('bcryptjs');
 const { sendOtpEmail, send2faEnabledEmail } = require('./mailer');
@@ -243,7 +244,7 @@ async function processFile(fileId, meta) {
 // ---------------------------------------------------------------------------
 // Claude: document text + a user question -> a single JSON object
 // ---------------------------------------------------------------------------
-async function askClaude(rawText, tablesCsv, query) {
+async function askClaude(rawText, tablesCsv, query, instructions) {
   const prompt = `You are given the extracted contents of one or more documents. When
 multiple documents are present they are separated by lines like "===== FILE: name =====".
 
@@ -254,7 +255,7 @@ Answer the user's request using ONLY the information in these documents. When th
 spans multiple documents (totals, comparisons, counts), aggregate across all of them.
 Represent the answer as a single JSON object. For tabular answers use an array of objects
 with consistent keys. If the documents do not contain the answer, return {"note": "..."}.
-
+${instructions ? `\nThe user has standing instructions — follow them when they don't conflict with the document:\n${instructions}\n` : ''}
 User request: ${query}`;
 
   const response = await anthropic.messages.create({
@@ -466,6 +467,59 @@ app.post('/api/2fa', async (req, res) => {
   }
 });
 
+// Custom instructions applied to every query
+app.post('/api/user/instructions', async (req, res) => {
+  try {
+    const { userId, customInstructions } = req.body;
+    const user = await userModel.findByIdAndUpdate(
+      userId,
+      { customInstructions: String(customInstructions || '').slice(0, 4000) },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ userInfo: safeUser(user) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Saved prompts (reusable, named)
+app.get('/api/prompts', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const prompts = await SavedPrompt.find(userId ? { userId } : {}).sort({ createdAt: -1 });
+    res.json(prompts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+app.post('/api/prompts', async (req, res) => {
+  try {
+    const { userId, title, prompt } = req.body;
+    if (!userId || !title || !prompt) return res.status(400).json({ message: 'Missing fields' });
+    const saved = await SavedPrompt.create({
+      userId,
+      title: String(title).slice(0, 120),
+      prompt: String(prompt).slice(0, 2000),
+    });
+    res.status(201).json(saved);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+app.delete('/api/prompts/:id', async (req, res) => {
+  try {
+    await SavedPrompt.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Prompt deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // ===========================================================================
 // Files
 // ===========================================================================
@@ -669,7 +723,8 @@ app.post('/api/query', async (req, res) => {
       combined += block;
     }
 
-    const raw = await askClaude(combined, '', query);
+    const u2 = await userModel.findById(files[0].userId).select('customInstructions').catch(() => null);
+    const raw = await askClaude(combined, '', query, u2 && u2.customInstructions);
     let data;
     try {
       data = JSON.parse(raw);
@@ -828,7 +883,8 @@ app.post('/api/files/:id/query', async (req, res) => {
     if (!file) return res.status(404).json({ message: 'File not found' });
     if (file.status !== 'ready') return res.status(400).json({ message: 'File is still being processed' });
 
-    const raw = await askClaude(file.rawText, file.tablesCsv, query);
+    const u1 = await userModel.findById(file.userId).select('customInstructions').catch(() => null);
+    const raw = await askClaude(file.rawText, file.tablesCsv, query, u1 && u1.customInstructions);
     let data;
     try {
       data = JSON.parse(raw);

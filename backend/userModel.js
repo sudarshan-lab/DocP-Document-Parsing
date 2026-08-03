@@ -12,6 +12,8 @@ const schema = mongoose.Schema(
         otp: String,
         otpExpires: Date,
         lastTwoFactorNudge: Date,
+        // Standing instructions applied to every query (like ChatGPT custom instructions)
+        customInstructions: { type: String, default: '' },
     },
     {timestamps: true}
 )

@@ -1,8 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { message } from "antd";
 import AppShell from "../components/AppShell";
 import { getUser, setUser } from "../auth";
-import { set2fa } from "../api";
+import {
+  set2fa,
+  updateInstructions,
+  listPrompts,
+  createPrompt,
+  deletePrompt,
+  SavedPromptItem,
+} from "../api";
 
 export default function Settings() {
   const user = getUser()!;
@@ -11,6 +18,18 @@ export default function Settings() {
   );
   const [twoFA, setTwoFA] = useState(!!user.twoFactorEnabled);
   const [busy, setBusy] = useState(false);
+
+  const [instructions, setInstructions] = useState(user.customInstructions || "");
+  const [savingInstr, setSavingInstr] = useState(false);
+
+  const [prompts, setPrompts] = useState<SavedPromptItem[]>([]);
+  const [pTitle, setPTitle] = useState("");
+  const [pText, setPText] = useState("");
+
+  useEffect(() => {
+    listPrompts(user._id).then(setPrompts).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setT = (v: string) => {
     setTheme(v);
@@ -35,6 +54,42 @@ export default function Settings() {
     }
   };
 
+  const saveInstructions = async () => {
+    setSavingInstr(true);
+    try {
+      const updated = await updateInstructions(user._id, instructions);
+      setUser(updated);
+      message.success("Custom instructions saved");
+    } catch {
+      message.error("Could not save");
+    } finally {
+      setSavingInstr(false);
+    }
+  };
+
+  const addPrompt = async () => {
+    if (!pTitle.trim() || !pText.trim()) {
+      message.error("Give the prompt a name and text");
+      return;
+    }
+    try {
+      const p = await createPrompt(user._id, pTitle.trim(), pText.trim());
+      setPrompts((s) => [p, ...s]);
+      setPTitle("");
+      setPText("");
+    } catch {
+      message.error("Could not save prompt");
+    }
+  };
+  const removePrompt = async (id: string) => {
+    try {
+      await deletePrompt(id);
+      setPrompts((s) => s.filter((p) => p._id !== id));
+    } catch {
+      message.error("Could not delete");
+    }
+  };
+
   const fields: [string, string][] = [
     ["First name", user.firstName],
     ["Last name", user.lastName],
@@ -45,6 +100,68 @@ export default function Settings() {
   return (
     <AppShell>
       <h1 style={{ marginTop: 0 }}>Settings</h1>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-header">Custom instructions</div>
+        <div style={{ padding: 16 }}>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+            Standing instructions applied to <strong>every</strong> question you ask — so you don't
+            repeat yourself. E.g. "Always include a total row; format money as $ with commas; give
+            dates as MM/DD/YYYY."
+          </div>
+          <textarea
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="Add instructions the assistant should always follow…"
+            rows={4}
+            style={{ resize: "vertical" }}
+          />
+          <div style={{ marginTop: 10 }}>
+            <button className="btn btn-primary" onClick={saveInstructions} disabled={savingInstr}>
+              {savingInstr ? "Saving…" : "Save instructions"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-header">Saved prompts</div>
+        <div style={{ padding: 16 }}>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+            Reusable prompts you can run on any document or set with one click from the chat.
+          </div>
+          {prompts.length > 0 && (
+            <div className="list" style={{ marginBottom: 14 }}>
+              {prompts.map((p) => (
+                <div key={p._id} className="row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{p.title}</div>
+                    <div className="faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.prompt}
+                    </div>
+                  </div>
+                  <button className="btn btn-sm btn-danger" onClick={() => removePrompt(p._id)}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "grid", gap: 8 }}>
+            <input value={pTitle} onChange={(e) => setPTitle(e.target.value)} placeholder="Prompt name (e.g. 'Line items')" />
+            <textarea
+              value={pText}
+              onChange={(e) => setPText(e.target.value)}
+              placeholder="The prompt (e.g. 'List every line item with quantity and amount, plus a total row')"
+              rows={2}
+              style={{ resize: "vertical" }}
+            />
+            <div>
+              <button className="btn" onClick={addPrompt}>＋ Add prompt</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-header">Profile</div>
@@ -80,7 +197,7 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 18 }}>
+      <div className="card">
         <div className="card-header">Appearance</div>
         <div style={{ padding: 16, display: "flex", gap: 10 }}>
           <button className={"btn" + (theme === "dark" ? " btn-primary" : "")} onClick={() => setT("dark")}>
@@ -89,14 +206,6 @@ export default function Settings() {
           <button className={"btn" + (theme === "light" ? " btn-primary" : "")} onClick={() => setT("light")}>
             ☀ Light
           </button>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header">About</div>
-        <div style={{ padding: 16 }} className="muted">
-          DocP turns your documents into answers. Upload PDFs, Word docs, or images, ask questions in
-          plain language, and save the tables you care about.
         </div>
       </div>
     </AppShell>

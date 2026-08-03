@@ -4,7 +4,16 @@ import remarkGfm from "remark-gfm";
 import { message } from "antd";
 import ResultView from "./ResultView";
 import LoadingMessages from "./LoadingMessages";
-import { queryFile, queryFiles, saveTable, saveMultiTable, Validation } from "../api";
+import {
+  queryFile,
+  queryFiles,
+  saveTable,
+  saveMultiTable,
+  listPrompts,
+  createPrompt,
+  Validation,
+  SavedPromptItem,
+} from "../api";
 import { getUser } from "../auth";
 
 type Msg =
@@ -74,11 +83,30 @@ export default function Chatbot({
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [prompts, setPrompts] = useState<SavedPromptItem[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: 1e9, behavior: "smooth" });
   }, [msgs, busy]);
+  useEffect(() => {
+    if (user) listPrompts(user._id).then(setPrompts).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const savePrompt = async () => {
+    const text = input.trim();
+    if (!text || !user) return;
+    const title = window.prompt("Name this prompt:", text.slice(0, 40));
+    if (title === null) return;
+    try {
+      const p = await createPrompt(user._id, title.trim() || text.slice(0, 40), text);
+      setPrompts((s) => [p, ...s]);
+      message.success("Prompt saved");
+    } catch {
+      message.error("Could not save prompt");
+    }
+  };
 
   const askQuery = (raw: string) => {
     const q = raw.trim();
@@ -244,20 +272,33 @@ export default function Chatbot({
           );
         })}
 
-        {suggestions &&
-          suggestions.length > 0 &&
+        {(prompts.length > 0 || (suggestions && suggestions.length > 0)) &&
           !msgs.some((m) => m.role === "user" || m.role === "confirm") && (
-            <div>
-              <div className="faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>
-                Suggested questions
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {suggestions.map((q, i) => (
-                  <button key={i} className="chip" onClick={() => askQuery(q)}>
-                    {q}
-                  </button>
-                ))}
-              </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {prompts.length > 0 && (
+                <div>
+                  <div className="faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>Saved prompts</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {prompts.map((p) => (
+                      <button key={p._id} className="chip" title={p.prompt} onClick={() => askQuery(p.prompt)}>
+                        ⭐ {p.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {suggestions && suggestions.length > 0 && (
+                <div>
+                  <div className="faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>Suggested questions</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {suggestions.map((q, i) => (
+                      <button key={i} className="chip" onClick={() => askQuery(q)}>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -282,6 +323,9 @@ export default function Chatbot({
           rows={1}
           style={{ resize: "none", maxHeight: 120 }}
         />
+        <button className="btn" title="Save as prompt" onClick={savePrompt} disabled={!input.trim()}>
+          💾
+        </button>
         <button className="btn btn-primary" onClick={ask} disabled={busy || !input.trim()}>
           Ask
         </button>

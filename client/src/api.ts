@@ -12,6 +12,14 @@ export interface UserInfo {
   userName: string;
   email: string;
   twoFactorEnabled?: boolean;
+  customInstructions?: string;
+}
+
+export interface SavedPromptItem {
+  _id: string;
+  title: string;
+  prompt: string;
+  createdAt: string;
 }
 
 export interface LoginResult {
@@ -74,6 +82,20 @@ export const verifyOtp = (userId: string, otp: string) =>
 
 export const set2fa = (userId: string, enabled: boolean) =>
   api.post("/api/2fa", { userId, enabled }).then((r) => r.data.userInfo as UserInfo);
+
+export const updateInstructions = (userId: string, customInstructions: string) =>
+  api
+    .post("/api/user/instructions", { userId, customInstructions })
+    .then((r) => r.data.userInfo as UserInfo);
+
+export const listPrompts = (userId: string) =>
+  api.get("/api/prompts", { params: { userId } }).then((r) => r.data as SavedPromptItem[]);
+
+export const createPrompt = (userId: string, title: string, prompt: string) =>
+  api.post("/api/prompts", { userId, title, prompt }).then((r) => r.data as SavedPromptItem);
+
+export const deletePrompt = (id: string) =>
+  api.delete(`/api/prompts/${id}`).then((r) => r.data);
 
 export const signup = (payload: {
   firstName: string;
