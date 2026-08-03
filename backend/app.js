@@ -729,6 +729,18 @@ app.get('/api/files/:id/search', async (req, res) => {
   }
 });
 
+// A document's full extracted text (for the in-viewer find/text view)
+app.get('/api/files/:id/text', async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id).select('rawText');
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    res.json({ text: file.rawText || '' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Generate a table for a query — NOT saved (returned for the user to confirm/keep)
 app.post('/api/files/:id/query', async (req, res) => {
   try {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { message } from "antd";
 import dayjs from "dayjs";
@@ -8,40 +8,15 @@ import ResultView from "../components/ResultView";
 import LoadingMessages from "../components/LoadingMessages";
 import {
   getFile,
+  getFileText,
   deleteTable,
   deleteFile,
   updateFile,
-  searchFile,
   FileItem,
   TableResultItem,
 } from "../api";
 
-type Tab = "chat" | "tables" | "document" | "search";
-
-// wrap occurrences of q inside text with a highlight
-function highlight(text: string, q: string) {
-  if (!q) return text;
-  const out: any[] = [];
-  const lower = text.toLowerCase();
-  const ql = q.toLowerCase();
-  let i = 0;
-  let k = 0;
-  for (;;) {
-    const idx = lower.indexOf(ql, i);
-    if (idx === -1) {
-      out.push(text.slice(i));
-      break;
-    }
-    if (idx > i) out.push(text.slice(i, idx));
-    out.push(
-      <mark key={k++} style={{ background: "var(--attention)", color: "#000", padding: "0 2px", borderRadius: 3 }}>
-        {text.slice(idx, idx + q.length)}
-      </mark>
-    );
-    i = idx + q.length;
-  }
-  return out;
-}
+type Tab = "chat" | "tables" | "document";
 
 export default function FilePage() {
   const { id } = useParams();
@@ -57,14 +32,16 @@ export default function FilePage() {
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
-  const [searchQ, setSearchQ] = useState("");
-  const [lastQ, setLastQ] = useState("");
-  const [searchBusy, setSearchBusy] = useState(false);
-  const [results, setResults] = useState<{
-    matches: { line: number; text: string }[];
-    count: number;
-    truncated: boolean;
-  } | null>(null);
+
+  // in-document find
+  const [docView, setDocView] = useState<"original" | "text">("original");
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQ, setFindQ] = useState("");
+  const [cur, setCur] = useState(0);
+  const [docText, setDocText] = useState<string | null>(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const matchRefs = useRef<(HTMLElement | null)[]>([]);
+  const findRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -72,11 +49,109 @@ export default function FilePage() {
       .then(setState)
       .catch(() => message.error("Could not load this file"));
   }, [id]);
-
   useEffect(() => {
     setLoading(true);
     Promise.resolve(load()).finally(() => setLoading(false));
   }, [load]);
+
+  const ensureText = useCallback(() => {
+    if (docText !== null || textLoading || !id) return;
+    setTextLoading(true);
+    getFileText(id)
+      .then(setDocText)
+      .catch(() => setDocText(""))
+      .finally(() => setTextLoading(false));
+  }, [docText, textLoading, id]);
+
+  const openFind = useCallback(() => {
+    setDocView("text");
+    ensureText();
+    setFindOpen(true);
+    setTimeout(() => findRef.current?.focus(), 60);
+  }, [ensureText]);
+  const closeFind = () => {
+    setFindOpen(false);
+    setFindQ("");
+  };
+
+  const matchCount = useMemo(() => {
+    if (!docText || !findQ) return 0;
+    const lower = docText.toLowerCase();
+    const ql = findQ.toLowerCase();
+    let n = 0;
+    let i = 0;
+    for (;;) {
+      const idx = lower.indexOf(ql, i);
+      if (idx === -1) break;
+      n++;
+      i = idx + ql.length;
+    }
+    return n;
+  }, [docText, findQ]);
+
+  const renderedText = useMemo(() => {
+    matchRefs.current = [];
+    if (!docText) return null;
+    if (!findQ) return docText;
+    const parts: any[] = [];
+    const lower = docText.toLowerCase();
+    const ql = findQ.toLowerCase();
+    let i = 0;
+    let m = 0;
+    for (;;) {
+      const idx = lower.indexOf(ql, i);
+      if (idx === -1) {
+        parts.push(docText.slice(i));
+        break;
+      }
+      if (idx > i) parts.push(docText.slice(i, idx));
+      const mi = m;
+      parts.push(
+        <mark
+          key={mi}
+          ref={(el) => {
+            matchRefs.current[mi] = el;
+          }}
+          style={{
+            background: mi === cur ? "#ff9632" : "rgba(210,153,34,0.55)",
+            color: "#000",
+            borderRadius: 2,
+            padding: "0 1px",
+            boxShadow: mi === cur ? "0 0 0 2px #ff9632" : "none",
+          }}
+        >
+          {docText.slice(idx, idx + findQ.length)}
+        </mark>
+      );
+      i = idx + findQ.length;
+      m++;
+    }
+    return parts;
+  }, [docText, findQ, cur]);
+
+  // reset to the first match whenever the query changes
+  useEffect(() => {
+    setCur(0);
+  }, [findQ]);
+  // scroll the current match into view
+  useEffect(() => {
+    if (matchCount > 0) matchRefs.current[cur]?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [cur, matchCount]);
+  // Ctrl/Cmd+F opens our find (only while the Document tab is active)
+  useEffect(() => {
+    if (tab !== "document") return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        openFind();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, openFind]);
+
+  const next = () => matchCount && setCur((c) => (c + 1) % matchCount);
+  const prev = () => matchCount && setCur((c) => (c - 1 + matchCount) % matchCount);
 
   if (loading || !state)
     return (
@@ -91,8 +166,7 @@ export default function FilePage() {
   const isPdf =
     (file.mimeType || "").includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
   const isImage =
-    (file.mimeType || "").startsWith("image/") ||
-    /\.(png|jpe?g|tiff?)$/i.test(file.fileName);
+    (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|tiff?)$/i.test(file.fileName);
   const tags = file.tags || [];
 
   const patch = async (p: { fileName?: string; tags?: string[] }) => {
@@ -134,19 +208,12 @@ export default function FilePage() {
     }
   };
 
-  const runSearch = async () => {
-    const q = searchQ.trim();
-    if (!q) return;
-    setSearchBusy(true);
-    setLastQ(q);
-    try {
-      setResults(await searchFile(file._id, q));
-    } catch {
-      message.error("Search failed");
-    } finally {
-      setSearchBusy(false);
-    }
-  };
+  const segStyle = (on: boolean): React.CSSProperties => ({
+    border: "none",
+    borderRadius: 0,
+    background: on ? "var(--overlay)" : "transparent",
+    fontWeight: on ? 600 : 400,
+  });
 
   return (
     <AppShell>
@@ -212,9 +279,6 @@ export default function FilePage() {
             <button className={"tab" + (tab === "document" ? " active" : "")} onClick={() => setTab("document")}>
               📄 Document
             </button>
-            <button className={"tab" + (tab === "search" ? " active" : "")} onClick={() => setTab("search")}>
-              🔍 Find in doc
-            </button>
           </div>
 
           {tab === "chat" && (
@@ -253,81 +317,109 @@ export default function FilePage() {
             ))}
 
           {tab === "document" && (
-            <div className="card" style={{ padding: 10, height: "72vh", overflow: "hidden" }}>
-              {isPdf ? (
-                <iframe
-                  title="document"
-                  src={viewUrl}
-                  style={{ width: "100%", height: "100%", border: "none", borderRadius: 6, background: "#fff" }}
-                />
-              ) : isImage ? (
-                <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center" }}>
-                  <img src={viewUrl} alt={file.fileName} style={{ maxWidth: "100%", borderRadius: 6 }} />
+            <div className="card" style={{ height: "72vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              {/* toolbar */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+                <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
+                  <button className="btn btn-sm" style={segStyle(docView === "original")} onClick={() => setDocView("original")}>
+                    Original
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    style={segStyle(docView === "text")}
+                    onClick={() => {
+                      setDocView("text");
+                      ensureText();
+                    }}
+                  >
+                    Text
+                  </button>
                 </div>
-              ) : (
-                <div style={{ height: "100%", display: "grid", placeItems: "center", textAlign: "center", padding: 24 }}>
-                  <div>
-                    <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
-                    <div className="muted" style={{ marginBottom: 12 }}>
-                      Inline preview isn't available for this file type.
-                    </div>
-                    <a className="btn" href={viewUrl} target="_blank" rel="noreferrer">
-                      ⬇ Download original
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === "search" && (
-            <div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                <input
-                  placeholder={`Search inside "${file.fileName}"…`}
-                  value={searchQ}
-                  onChange={(e) => setSearchQ(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                  autoFocus
-                />
-                <button className="btn btn-primary" onClick={runSearch} disabled={!searchQ.trim() || searchBusy}>
-                  Search
+                <button className="btn btn-sm" onClick={openFind} title="Find (Ctrl+F)">
+                  🔍 Find
                 </button>
+                {findOpen && (
+                  <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      ref={findRef}
+                      value={findQ}
+                      onChange={(e) => setFindQ(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.shiftKey ? prev() : next();
+                        } else if (e.key === "Escape") {
+                          closeFind();
+                        }
+                      }}
+                      placeholder="Find in document"
+                      style={{ height: 28, width: 190 }}
+                    />
+                    <span className="faint" style={{ fontSize: 12, minWidth: 62, textAlign: "center" }}>
+                      {matchCount ? `${cur + 1} of ${matchCount}` : findQ ? "0 results" : ""}
+                    </span>
+                    <button className="btn btn-sm" onClick={prev} disabled={!matchCount} title="Previous (Shift+Enter)">
+                      ↑
+                    </button>
+                    <button className="btn btn-sm" onClick={next} disabled={!matchCount} title="Next (Enter)">
+                      ↓
+                    </button>
+                    <button className="btn btn-sm btn-ghost" onClick={closeFind} title="Close (Esc)">
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
-              {searchBusy ? (
-                <div className="card" style={{ padding: 16 }}>
-                  <LoadingMessages compact />
-                </div>
-              ) : results ? (
-                results.count === 0 ? (
-                  <div className="card" style={{ padding: 20, color: "var(--muted)" }}>
-                    No matches for “{lastQ}”.
+
+              {/* body */}
+              <div style={{ flex: 1, overflow: "auto" }}>
+                {docView === "text" ? (
+                  textLoading ? (
+                    <div style={{ padding: 16 }}>
+                      <LoadingMessages compact />
+                    </div>
+                  ) : !docText ? (
+                    <div style={{ padding: 16, color: "var(--muted)" }}>
+                      No extractable text for this document.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: 16,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        fontSize: 13.5,
+                        lineHeight: 1.75,
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                      }}
+                    >
+                      {renderedText}
+                    </div>
+                  )
+                ) : isPdf ? (
+                  <iframe
+                    title="document"
+                    src={viewUrl}
+                    style={{ width: "100%", height: "100%", border: "none", background: "#fff" }}
+                  />
+                ) : isImage ? (
+                  <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center", padding: 12 }}>
+                    <img src={viewUrl} alt={file.fileName} style={{ maxWidth: "100%", borderRadius: 6 }} />
                   </div>
                 ) : (
-                  <>
-                    <div className="faint" style={{ fontSize: 13, marginBottom: 8 }}>
-                      {results.count}
-                      {results.truncated ? "+" : ""} match{results.count === 1 ? "" : "es"} for “{lastQ}”
+                  <div style={{ height: "100%", display: "grid", placeItems: "center", textAlign: "center", padding: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
+                      <div className="muted" style={{ marginBottom: 12 }}>
+                        Inline preview isn't available for this file type.
+                      </div>
+                      <a className="btn" href={viewUrl} target="_blank" rel="noreferrer">
+                        ⬇ Download original
+                      </a>
                     </div>
-                    <div className="list">
-                      {results.matches.map((m, i) => (
-                        <div key={i} className="row" style={{ alignItems: "flex-start" }}>
-                          <span className="faint" style={{ fontSize: 12, minWidth: 46 }}>
-                            ln {m.line}
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.7 }}>
-                            {highlight(m.text, lastQ)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )
-              ) : (
-                <div className="card" style={{ padding: 20, color: "var(--muted)" }}>
-                  Type a word or phrase to find it anywhere in this document — including scanned pages and images.
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
