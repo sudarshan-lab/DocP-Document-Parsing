@@ -139,12 +139,17 @@ async function runTextractMode(mode, key) {
   await txComplete(mode, jobId);
   const pages = await txResults(mode, jobId);
   const lines = [];
+  const words = [];
   for (const page of pages) {
     for (const b of page.Blocks || []) {
       if (b.BlockType === 'LINE') lines.push(b.Text);
+      else if (b.BlockType === 'WORD' && b.Geometry && b.Geometry.BoundingBox && words.length < 8000) {
+        const bb = b.Geometry.BoundingBox;
+        words.push({ text: b.Text, page: b.Page || 1, x: bb.Left, y: bb.Top, w: bb.Width, h: bb.Height });
+      }
     }
   }
-  return { rawText: lines.join('\n'), tablesCsv: '' };
+  return { rawText: lines.join('\n'), tablesCsv: '', words };
 }
 
 // Prefer cheap OCR (DetectDocumentText). If the IAM role isn't allowed that
@@ -215,11 +220,12 @@ async function extractContent({ s3Key, mimeType, fileName, buffer }) {
 // Runs in the background after upload; updates the File doc when done.
 async function processFile(fileId, meta) {
   try {
-    const { rawText, tablesCsv } = await extractContent(meta);
+    const { rawText, tablesCsv, words } = await extractContent(meta);
     const overview = await generateOverview(rawText, tablesCsv).catch(() => ({}));
     await File.findByIdAndUpdate(fileId, {
       rawText,
       tablesCsv,
+      words: Array.isArray(words) ? words : [],
       status: 'ready',
       error: '',
       summary: overview.summary || '',
@@ -482,7 +488,7 @@ app.get('/api/files', async (req, res) => {
   try {
     const { userId } = req.query;
     const files = await File.find(userId ? { userId } : {})
-      .select('-rawText -tablesCsv')
+      .select('-rawText -tablesCsv -words')
       .sort({ createdAt: -1 });
     res.json(files);
   } catch (err) {
@@ -494,7 +500,7 @@ app.get('/api/files', async (req, res) => {
 // File details + presigned view URL + its saved tables
 app.get('/api/files/:id', async (req, res) => {
   try {
-    const file = await File.findById(req.params.id).select('-rawText -tablesCsv');
+    const file = await File.findById(req.params.id).select('-rawText -tablesCsv -words');
     if (!file) return res.status(404).json({ message: 'File not found' });
     const viewUrl = s3.getSignedUrl('getObject', { Bucket: BUCKET, Key: file.s3Key, Expires: 3600 });
     const tables = await TableResult.find({ fileId: file._id }).sort({ createdAt: -1 });
@@ -571,7 +577,7 @@ app.get('/api/folders/:id', async (req, res) => {
     const folder = await Folder.findById(req.params.id);
     if (!folder) return res.status(404).json({ message: 'Folder not found' });
     const files = await File.find({ folderId: folder._id })
-      .select('-rawText -tablesCsv')
+      .select('-rawText -tablesCsv -words')
       .sort({ createdAt: -1 });
     const tables = await TableResult.find({ folderId: folder._id }).sort({ createdAt: -1 });
     res.json({ folder, files, tables });
@@ -735,6 +741,18 @@ app.get('/api/files/:id/text', async (req, res) => {
     const file = await File.findById(req.params.id).select('rawText');
     if (!file) return res.status(404).json({ message: 'File not found' });
     res.json({ text: file.rawText || '' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// OCR word geometry (normalized bboxes) for on-image highlight overlays
+app.get('/api/files/:id/geometry', async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id).select('words');
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    res.json({ words: file.words || [] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });

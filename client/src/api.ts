@@ -141,6 +141,18 @@ export const queryFile = (id: string, query: string) =>
 export const getFileText = (id: string) =>
   api.get(`/api/files/${id}/text`).then((r) => r.data.text as string);
 
+export interface OcrWord {
+  text: string;
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const getFileGeometry = (id: string) =>
+  api.get(`/api/files/${id}/geometry`).then((r) => r.data.words as OcrWord[]);
+
 export const saveTable = (id: string, query: string, data: any) =>
   api
     .post(`/api/files/${id}/tables`, { query, data })

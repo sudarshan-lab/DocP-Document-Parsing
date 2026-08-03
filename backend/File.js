@@ -18,6 +18,8 @@ const fileSchema = new mongoose.Schema(
     keyFacts: { type: mongoose.Schema.Types.Mixed, default: [] },
     suggestedQuestions: { type: [String], default: [] },
     tags: { type: [String], default: [] },
+    // OCR word geometry (normalized bboxes) for on-image highlight overlays
+    words: { type: Array, default: [] },
     error: { type: String, default: '' },
   },
   { timestamps: true }

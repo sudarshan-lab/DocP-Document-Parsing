@@ -7,6 +7,7 @@ import Chatbot from "../components/Chatbot";
 import ResultView from "../components/ResultView";
 import LoadingMessages from "../components/LoadingMessages";
 import PdfViewer from "../components/PdfViewer";
+import ImageViewer from "../components/ImageViewer";
 import {
   getFile,
   getFileText,
@@ -42,6 +43,7 @@ export default function FilePage() {
   const [docText, setDocText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [pdfCount, setPdfCount] = useState(0);
+  const [imageCount, setImageCount] = useState(0);
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
   const findRef = useRef<HTMLInputElement>(null);
 
@@ -73,14 +75,14 @@ export default function FilePage() {
   }, [docText, textLoading, id]);
 
   const openFind = useCallback(() => {
-    if (isPdf) setDocView("original");
+    if (isPdf || isImage) setDocView("original");
     else {
       setDocView("text");
       ensureText();
     }
     setFindOpen(true);
     setTimeout(() => findRef.current?.focus(), 60);
-  }, [ensureText, isPdf]);
+  }, [ensureText, isPdf, isImage]);
   const closeFind = () => {
     setFindOpen(false);
     setFindQ("");
@@ -141,7 +143,8 @@ export default function FilePage() {
     return parts;
   }, [docText, findQ, cur]);
 
-  const count = docView === "original" && isPdf ? pdfCount : matchCount;
+  const count =
+    docView === "text" ? matchCount : isPdf ? pdfCount : isImage ? imageCount : matchCount;
 
   // reset to the first match when the query or the view changes
   useEffect(() => {
@@ -415,9 +418,14 @@ export default function FilePage() {
                     onCount={setPdfCount}
                   />
                 ) : isImage ? (
-                  <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center", padding: 12 }}>
-                    <img src={viewUrl} alt={file.fileName} style={{ maxWidth: "100%", borderRadius: 6 }} />
-                  </div>
+                  <ImageViewer
+                    id={file._id}
+                    viewUrl={viewUrl}
+                    fileName={file.fileName}
+                    query={findQ}
+                    activeIndex={cur}
+                    onCount={setImageCount}
+                  />
                 ) : (
                   <div style={{ height: "100%", display: "grid", placeItems: "center", textAlign: "center", padding: 24 }}>
                     <div>
