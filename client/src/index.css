@@ -553,3 +553,14 @@ mark.pdfhl.current {
   background: rgba(255, 150, 50, 0.75);
   box-shadow: 0 0 0 2px #ff9632;
 }
+/* OCR geometry overlay boxes (scanned PDFs / images) */
+.geobox {
+  position: absolute;
+  background: rgba(255, 214, 10, 0.4);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.geobox.current {
+  background: rgba(255, 150, 50, 0.6);
+  box-shadow: 0 0 0 2px #ff9632;
+}

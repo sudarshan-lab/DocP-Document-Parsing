@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import LoadingMessages from "./LoadingMessages";
+import { getFileGeometry, OcrWord } from "../api";
 
 // Same-origin worker copied into public/ (see build).
 pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ""}/pdf.worker.min.js`;
@@ -11,19 +12,29 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export default function PdfViewer({
   url,
+  fileId,
   query,
   activeIndex,
   onCount,
 }: {
   url: string;
+  fileId: string;
   query: string;
   activeIndex: number;
   onCount: (n: number) => void;
 }) {
   const [numPages, setNumPages] = useState(0);
   const [width, setWidth] = useState(680);
-  const [tick, setTick] = useState(0); // bumped when a page text layer finishes
+  const [tick, setTick] = useState(0); // bumped when a page (re)renders
+  const [aspect, setAspect] = useState<Record<number, number>>({}); // page -> height/width
+  const [words, setWords] = useState<OcrWord[]>([]); // OCR geometry (scanned PDFs)
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    getFileGeometry(fileId)
+      .then(setWords)
+      .catch(() => setWords([]));
+  }, [fileId]);
 
   useEffect(() => {
     const measure = () => {
@@ -34,6 +45,7 @@ export default function PdfViewer({
     return () => window.removeEventListener("resize", measure);
   }, []);
 
+  // digital PDFs: highlight in the text layer
   const textRenderer = useCallback(
     (item: { str: string }) => {
       if (!query) return item.str;
@@ -43,21 +55,29 @@ export default function PdfViewer({
     [query]
   );
 
-  // recount highlights, mark the active one, scroll it into view
+  // scanned PDFs: words matching the query, to overlay as boxes
+  const geoMatches = useMemo(() => {
+    if (!query || !words.length) return [];
+    const ql = query.toLowerCase();
+    return words.filter((w) => w.text.toLowerCase().includes(ql));
+  }, [query, words]);
+
+  // recount all highlights (text-layer marks + geometry boxes, in DOM order),
+  // mark the active one, and scroll it into view
   useEffect(() => {
     const t = setTimeout(() => {
-      const marks = wrapRef.current
-        ? Array.from(wrapRef.current.querySelectorAll("mark.pdfhl"))
+      const els = wrapRef.current
+        ? Array.from(wrapRef.current.querySelectorAll("mark.pdfhl, .geobox"))
         : [];
-      onCount(marks.length);
-      marks.forEach((m, i) => m.classList.toggle("current", i === activeIndex));
-      (marks[activeIndex] as HTMLElement | undefined)?.scrollIntoView({
+      onCount(els.length);
+      els.forEach((m, i) => m.classList.toggle("current", i === activeIndex));
+      (els[activeIndex] as HTMLElement | undefined)?.scrollIntoView({
         block: "center",
         behavior: "smooth",
       });
     }, 120);
     return () => clearTimeout(t);
-  }, [query, numPages, activeIndex, tick, onCount]);
+  }, [query, numPages, activeIndex, tick, geoMatches, width, onCount]);
 
   return (
     <div ref={wrapRef} style={{ padding: 14, display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -71,17 +91,33 @@ export default function PdfViewer({
           </div>
         }
       >
-        {Array.from({ length: numPages }, (_, i) => (
-          <div key={i} style={{ marginBottom: 14, boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}>
-            <Page
-              pageNumber={i + 1}
-              width={width}
-              renderAnnotationLayer={false}
-              customTextRenderer={textRenderer}
-              onRenderTextLayerSuccess={() => setTick((x) => x + 1)}
-            />
-          </div>
-        ))}
+        {Array.from({ length: numPages }, (_, i) => {
+          const pn = i + 1;
+          const rh = width * (aspect[pn] || 1.414);
+          const pageWords = geoMatches.filter((w) => (w.page || 1) === pn);
+          return (
+            <div key={i} style={{ position: "relative", marginBottom: 14, boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}>
+              <Page
+                pageNumber={pn}
+                width={width}
+                renderAnnotationLayer={false}
+                customTextRenderer={textRenderer}
+                onLoadSuccess={(p: any) => {
+                  setAspect((a) => ({ ...a, [pn]: p.height / p.width || 1.414 }));
+                  setTick((t) => t + 1);
+                }}
+                onRenderTextLayerSuccess={() => setTick((t) => t + 1)}
+              />
+              {pageWords.map((w, j) => (
+                <div
+                  key={j}
+                  className="geobox"
+                  style={{ left: w.x * width, top: w.y * rh, width: w.w * width, height: w.h * rh }}
+                />
+              ))}
+            </div>
+          );
+        })}
       </Document>
     </div>
   );

@@ -413,6 +413,7 @@ export default function FilePage() {
                 ) : isPdf ? (
                   <PdfViewer
                     url={`/api/files/${file._id}/raw`}
+                    fileId={file._id}
                     query={findQ}
                     activeIndex={cur}
                     onCount={setPdfCount}
