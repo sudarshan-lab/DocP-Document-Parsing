@@ -6,6 +6,7 @@ import AppShell from "../components/AppShell";
 import Chatbot from "../components/Chatbot";
 import ResultView from "../components/ResultView";
 import LoadingMessages from "../components/LoadingMessages";
+import PdfViewer from "../components/PdfViewer";
 import {
   getFile,
   getFileText,
@@ -40,8 +41,16 @@ export default function FilePage() {
   const [cur, setCur] = useState(0);
   const [docText, setDocText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
+  const [pdfCount, setPdfCount] = useState(0);
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
   const findRef = useRef<HTMLInputElement>(null);
+
+  const file0 = state?.file;
+  const isPdf =
+    !!file0 && ((file0.mimeType || "").includes("pdf") || file0.fileName.toLowerCase().endsWith(".pdf"));
+  const isImage =
+    !!file0 &&
+    ((file0.mimeType || "").startsWith("image/") || /\.(png|jpe?g|tiff?)$/i.test(file0.fileName));
 
   const load = useCallback(() => {
     if (!id) return;
@@ -64,11 +73,14 @@ export default function FilePage() {
   }, [docText, textLoading, id]);
 
   const openFind = useCallback(() => {
-    setDocView("text");
-    ensureText();
+    if (isPdf) setDocView("original");
+    else {
+      setDocView("text");
+      ensureText();
+    }
     setFindOpen(true);
     setTimeout(() => findRef.current?.focus(), 60);
-  }, [ensureText]);
+  }, [ensureText, isPdf]);
   const closeFind = () => {
     setFindOpen(false);
     setFindQ("");
@@ -129,14 +141,17 @@ export default function FilePage() {
     return parts;
   }, [docText, findQ, cur]);
 
-  // reset to the first match whenever the query changes
+  const count = docView === "original" && isPdf ? pdfCount : matchCount;
+
+  // reset to the first match when the query or the view changes
   useEffect(() => {
     setCur(0);
-  }, [findQ]);
-  // scroll the current match into view
+  }, [findQ, docView]);
+  // scroll the current match into view (text view; the PDF view scrolls itself)
   useEffect(() => {
-    if (matchCount > 0) matchRefs.current[cur]?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [cur, matchCount]);
+    if (docView === "text" && matchCount > 0)
+      matchRefs.current[cur]?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [cur, matchCount, docView]);
   // Ctrl/Cmd+F opens our find (only while the Document tab is active)
   useEffect(() => {
     if (tab !== "document") return;
@@ -150,8 +165,8 @@ export default function FilePage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tab, openFind]);
 
-  const next = () => matchCount && setCur((c) => (c + 1) % matchCount);
-  const prev = () => matchCount && setCur((c) => (c - 1 + matchCount) % matchCount);
+  const next = () => count && setCur((c) => (c + 1) % count);
+  const prev = () => count && setCur((c) => (c - 1 + count) % count);
 
   if (loading || !state)
     return (
@@ -163,10 +178,6 @@ export default function FilePage() {
     );
 
   const { file, viewUrl, tables } = state;
-  const isPdf =
-    (file.mimeType || "").includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
-  const isImage =
-    (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|tiff?)$/i.test(file.fileName);
   const tags = file.tags || [];
 
   const patch = async (p: { fileName?: string; tags?: string[] }) => {
@@ -356,12 +367,12 @@ export default function FilePage() {
                       style={{ height: 28, width: 190 }}
                     />
                     <span className="faint" style={{ fontSize: 12, minWidth: 62, textAlign: "center" }}>
-                      {matchCount ? `${cur + 1} of ${matchCount}` : findQ ? "0 results" : ""}
+                      {count ? `${cur + 1} of ${count}` : findQ ? "0 results" : ""}
                     </span>
-                    <button className="btn btn-sm" onClick={prev} disabled={!matchCount} title="Previous (Shift+Enter)">
+                    <button className="btn btn-sm" onClick={prev} disabled={!count} title="Previous (Shift+Enter)">
                       ↑
                     </button>
-                    <button className="btn btn-sm" onClick={next} disabled={!matchCount} title="Next (Enter)">
+                    <button className="btn btn-sm" onClick={next} disabled={!count} title="Next (Enter)">
                       ↓
                     </button>
                     <button className="btn btn-sm btn-ghost" onClick={closeFind} title="Close (Esc)">
@@ -397,10 +408,11 @@ export default function FilePage() {
                     </div>
                   )
                 ) : isPdf ? (
-                  <iframe
-                    title="document"
-                    src={viewUrl}
-                    style={{ width: "100%", height: "100%", border: "none", background: "#fff" }}
+                  <PdfViewer
+                    url={`/api/files/${file._id}/raw`}
+                    query={findQ}
+                    activeIndex={cur}
+                    onCount={setPdfCount}
                   />
                 ) : isImage ? (
                   <div style={{ height: "100%", overflow: "auto", display: "grid", placeItems: "center", padding: 12 }}>

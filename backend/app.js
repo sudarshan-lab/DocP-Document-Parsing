@@ -741,6 +741,27 @@ app.get('/api/files/:id/text', async (req, res) => {
   }
 });
 
+// Stream the raw file bytes same-origin (so pdf.js can fetch a PDF without
+// hitting S3 CORS). Used by the in-page PDF viewer.
+app.get('/api/files/:id/raw', async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id).select('s3Key mimeType fileName');
+    if (!file) return res.status(404).json({ message: 'File not found' });
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName || 'file')}"`);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    const stream = s3.getObject({ Bucket: BUCKET, Key: file.s3Key }).createReadStream();
+    stream.on('error', (e) => {
+      console.error('raw stream error:', e && e.message);
+      if (!res.headersSent) res.status(500).end();
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('raw error:', err && err.message);
+    res.status(500).json({ message: 'Could not load file' });
+  }
+});
+
 // Generate a table for a query — NOT saved (returned for the user to confirm/keep)
 app.post('/api/files/:id/query', async (req, res) => {
   try {

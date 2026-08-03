@@ -537,3 +537,19 @@ select:focus {
     transform: rotate(360deg);
   }
 }
+
+/* --- in-page PDF search highlights (react-pdf text layer) --- */
+.react-pdf__Page {
+  background: #fff !important;
+}
+.react-pdf__Page__textContent mark,
+mark.pdfhl {
+  color: transparent;
+  background: rgba(255, 214, 10, 0.45);
+  border-radius: 2px;
+}
+.react-pdf__Page__textContent mark.current,
+mark.pdfhl.current {
+  background: rgba(255, 150, 50, 0.75);
+  box-shadow: 0 0 0 2px #ff9632;
+}
