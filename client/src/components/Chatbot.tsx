@@ -4,14 +4,21 @@ import remarkGfm from "remark-gfm";
 import { message } from "antd";
 import ResultView from "./ResultView";
 import LoadingMessages from "./LoadingMessages";
-import { queryFile, queryFiles, saveTable, saveMultiTable } from "../api";
+import { queryFile, queryFiles, saveTable, saveMultiTable, Validation } from "../api";
 import { getUser } from "../auth";
 
 type Msg =
   | { id: string; role: "hint"; text: string }
   | { id: string; role: "user"; text: string }
   | { id: string; role: "confirm"; query: string }
-  | { id: string; role: "assistant"; query: string; data: any; saved: boolean }
+  | {
+      id: string;
+      role: "assistant";
+      query: string;
+      data: any;
+      saved: boolean;
+      validation?: Validation | null;
+    }
   | { id: string; role: "error"; text: string };
 
 const uid = () => Math.random().toString(36).slice(2);
@@ -91,10 +98,11 @@ export default function Chatbot({
     );
     setBusy(true);
     try {
-      const { data } = multi
-        ? await queryFiles(fileIds!, query)
-        : await queryFile(fileId!, query);
-      setMsgs((m) => [...m, { id: uid(), role: "assistant", query, data, saved: false }]);
+      const res = multi ? await queryFiles(fileIds!, query) : await queryFile(fileId!, query);
+      setMsgs((m) => [
+        ...m,
+        { id: uid(), role: "assistant", query, data: res.data, validation: res.validation, saved: false },
+      ]);
     } catch (e: any) {
       setMsgs((m) => [
         ...m,
@@ -193,6 +201,33 @@ export default function Chatbot({
             );
           return (
             <div key={m.id} className="inset" style={{ padding: 12 }}>
+              {m.validation && (
+                <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span
+                    className={
+                      "badge " +
+                      (m.validation.status === "verified"
+                        ? "ready"
+                        : m.validation.status === "unsupported"
+                        ? "failed"
+                        : "processing")
+                    }
+                    title={m.validation.note}
+                  >
+                    <span className="dot" />
+                    {m.validation.status === "verified"
+                      ? "Verified against source"
+                      : m.validation.status === "unsupported"
+                      ? "Not supported — review"
+                      : "Partially supported"}
+                  </span>
+                  {m.validation.note && (
+                    <span className="faint" style={{ fontSize: 11 }}>
+                      {m.validation.note}
+                    </span>
+                  )}
+                </div>
+              )}
               <div style={{ overflowX: "auto" }}>{renderData(m.data)}</div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
                 {m.saved ? (

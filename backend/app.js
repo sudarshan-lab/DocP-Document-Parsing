@@ -269,6 +269,44 @@ User request: ${query}`;
   return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 }
 
+// One-level validation: a cheap, fast grounding check that the generated answer
+// is actually supported by the source. Returns null if the check itself fails
+// (never blocks the answer).
+async function validateAnswer(sourceText, query, data) {
+  try {
+    const prompt = `A user asked: "${query}"
+
+A system generated this JSON answer from the document(s):
+${JSON.stringify(data).slice(0, 8000)}
+
+Check the answer against the DOCUMENT below and reply with ONE JSON object:
+{"status":"verified|partial|unsupported","note":"one short sentence"}
+- verified: the answer's key facts are clearly supported by the document.
+- partial: some parts are supported, others are missing or uncertain.
+- unsupported: the answer is not supported (likely hallucinated) or absent from the document.
+
+DOCUMENT:
+${(sourceText || '').slice(0, 30000)}`;
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: 'You are a strict fact-checker. Reply with a single valid JSON object only.',
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const block = response.content.find((b) => b.type === 'text');
+    let text = block ? block.text.trim() : '';
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const parsed = JSON.parse(text);
+    const status = ['verified', 'partial', 'unsupported'].includes(parsed.status)
+      ? parsed.status
+      : 'partial';
+    return { status, note: String(parsed.note || '').slice(0, 240) };
+  } catch (e) {
+    console.error('validation error:', e && e.message);
+    return null;
+  }
+}
+
 // After Textract, ask Claude for a summary, key facts, and suggested questions.
 async function generateOverview(rawText, tablesCsv) {
   const prompt = `You are given a document's extracted contents. Return a single JSON object with exactly these keys:
@@ -638,7 +676,8 @@ app.post('/api/query', async (req, res) => {
     } catch {
       data = { answer: raw };
     }
-    res.json({ query, data, filesUsed: files.length - skipped.length, skipped });
+    const validation = await validateAnswer(combined, query, data);
+    res.json({ query, data, validation, filesUsed: files.length - skipped.length, skipped });
   } catch (err) {
     console.error('multi-query error:', err && err.message);
     res.status(500).json({ message: 'Failed to generate answer' });
@@ -796,7 +835,8 @@ app.post('/api/files/:id/query', async (req, res) => {
     } catch {
       data = { answer: raw };
     }
-    res.json({ query, data });
+    const validation = await validateAnswer(file.rawText, query, data);
+    res.json({ query, data, validation });
   } catch (err) {
     console.error('query error:', err && err.message);
     res.status(500).json({ message: 'Failed to generate answer' });

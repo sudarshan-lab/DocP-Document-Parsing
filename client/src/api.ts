@@ -110,7 +110,13 @@ export const queryFiles = (fileIds: string[], query: string) =>
     .post("/api/query", { fileIds, query })
     .then(
       (r) =>
-        r.data as { query: string; data: any; filesUsed: number; skipped: string[] }
+        r.data as {
+          query: string;
+          data: any;
+          validation: Validation | null;
+          filesUsed: number;
+          skipped: string[];
+        }
     );
 
 export const saveMultiTable = (p: {
@@ -133,10 +139,15 @@ export const getFile = (id: string) =>
       r.data as { file: FileItem; viewUrl: string; tables: TableResultItem[] }
   );
 
+export interface Validation {
+  status: "verified" | "partial" | "unsupported";
+  note: string;
+}
+
 export const queryFile = (id: string, query: string) =>
   api
     .post(`/api/files/${id}/query`, { query })
-    .then((r) => r.data as { query: string; data: any });
+    .then((r) => r.data as { query: string; data: any; validation: Validation | null });
 
 export const getFileText = (id: string) =>
   api.get(`/api/files/${id}/text`).then((r) => r.data.text as string);
