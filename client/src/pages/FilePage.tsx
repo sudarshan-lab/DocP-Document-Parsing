@@ -39,6 +39,7 @@ export default function FilePage() {
   const [docView, setDocView] = useState<"original" | "text">("original");
   const [findOpen, setFindOpen] = useState(false);
   const [findQ, setFindQ] = useState("");
+  const [dFind, setDFind] = useState("");
   const [cur, setCur] = useState(0);
   const [docText, setDocText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
@@ -89,9 +90,9 @@ export default function FilePage() {
   };
 
   const matchCount = useMemo(() => {
-    if (!docText || !findQ) return 0;
+    if (!docText || !dFind) return 0;
     const lower = docText.toLowerCase();
-    const ql = findQ.toLowerCase();
+    const ql = dFind.toLowerCase();
     let n = 0;
     let i = 0;
     for (;;) {
@@ -101,15 +102,15 @@ export default function FilePage() {
       i = idx + ql.length;
     }
     return n;
-  }, [docText, findQ]);
+  }, [docText, dFind]);
 
   const renderedText = useMemo(() => {
     matchRefs.current = [];
     if (!docText) return null;
-    if (!findQ) return docText;
+    if (!dFind) return docText;
     const parts: any[] = [];
     const lower = docText.toLowerCase();
-    const ql = findQ.toLowerCase();
+    const ql = dFind.toLowerCase();
     let i = 0;
     let m = 0;
     for (;;) {
@@ -134,18 +135,23 @@ export default function FilePage() {
             boxShadow: mi === cur ? "0 0 0 2px #ff9632" : "none",
           }}
         >
-          {docText.slice(idx, idx + findQ.length)}
+          {docText.slice(idx, idx + dFind.length)}
         </mark>
       );
-      i = idx + findQ.length;
+      i = idx + dFind.length;
       m++;
     }
     return parts;
-  }, [docText, findQ, cur]);
+  }, [docText, dFind, cur]);
 
   const count =
     docView === "text" ? matchCount : isPdf ? pdfCount : isImage ? imageCount : matchCount;
 
+  // debounce the text-view highlight query
+  useEffect(() => {
+    const t = setTimeout(() => setDFind(findQ.trim()), 200);
+    return () => clearTimeout(t);
+  }, [findQ]);
   // reset to the first match when the query or the view changes
   useEffect(() => {
     setCur(0);

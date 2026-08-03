@@ -28,7 +28,17 @@ export default function PdfViewer({
   const [tick, setTick] = useState(0); // bumped when a page (re)renders
   const [aspect, setAspect] = useState<Record<number, number>>({}); // page -> height/width
   const [words, setWords] = useState<OcrWord[]>([]); // OCR geometry (scanned PDFs)
+  const [dq, setDq] = useState(""); // debounced query (avoids re-rendering the text layer on every keystroke)
   const wrapRef = useRef<HTMLDivElement>(null);
+  const matchEls = useRef<HTMLElement[]>([]);
+  const activeRef = useRef(activeIndex);
+  activeRef.current = activeIndex;
+
+  // debounce the highlight query
+  useEffect(() => {
+    const t = setTimeout(() => setDq(query.trim()), 220);
+    return () => clearTimeout(t);
+  }, [query]);
 
   useEffect(() => {
     getFileGeometry(fileId)
@@ -45,39 +55,44 @@ export default function PdfViewer({
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  // digital PDFs: highlight in the text layer
+  // digital PDFs: highlight in the text layer (rebuilt only when dq changes)
   const textRenderer = useCallback(
     (item: { str: string }) => {
-      if (!query) return item.str;
-      const re = new RegExp(`(${escapeRe(query)})`, "gi");
+      if (!dq) return item.str;
+      const re = new RegExp(`(${escapeRe(dq)})`, "gi");
       return item.str.replace(re, '<mark class="pdfhl">$1</mark>');
     },
-    [query]
+    [dq]
   );
 
-  // scanned PDFs: words matching the query, to overlay as boxes
+  // scanned PDFs: words matching the query, overlaid as boxes
   const geoMatches = useMemo(() => {
-    if (!query || !words.length) return [];
-    const ql = query.toLowerCase();
+    if (!dq || !words.length) return [];
+    const ql = dq.toLowerCase();
     return words.filter((w) => w.text.toLowerCase().includes(ql));
-  }, [query, words]);
+  }, [dq, words]);
 
-  // recount all highlights (text-layer marks + geometry boxes, in DOM order),
-  // mark the active one, and scroll it into view
+  // collect all match elements (text-layer marks + geometry boxes) once the
+  // highlight settles; report the count and mark the active one
   useEffect(() => {
     const t = setTimeout(() => {
-      const els = wrapRef.current
-        ? Array.from(wrapRef.current.querySelectorAll("mark.pdfhl, .geobox"))
-        : [];
-      onCount(els.length);
-      els.forEach((m, i) => m.classList.toggle("current", i === activeIndex));
-      (els[activeIndex] as HTMLElement | undefined)?.scrollIntoView({
-        block: "center",
-        behavior: "smooth",
-      });
-    }, 120);
+      matchEls.current = Array.from(
+        wrapRef.current?.querySelectorAll("mark.pdfhl, .geobox") ?? []
+      ) as HTMLElement[];
+      onCount(matchEls.current.length);
+      matchEls.current.forEach((m, i) => m.classList.toggle("current", i === activeRef.current));
+      matchEls.current[activeRef.current]?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 80);
     return () => clearTimeout(t);
-  }, [query, numPages, activeIndex, tick, geoMatches, width, onCount]);
+  }, [dq, numPages, tick, geoMatches, width, onCount]);
+
+  // navigation: scroll to the active match immediately (uses the cached list)
+  useEffect(() => {
+    const els = matchEls.current;
+    if (!els.length) return;
+    els.forEach((m, i) => m.classList.toggle("current", i === activeIndex));
+    els[activeIndex]?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeIndex]);
 
   return (
     <div ref={wrapRef} style={{ padding: 14, display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -103,8 +118,7 @@ export default function PdfViewer({
                 renderAnnotationLayer={false}
                 customTextRenderer={textRenderer}
                 onLoadSuccess={(p: any) => {
-                  setAspect((a) => ({ ...a, [pn]: p.height / p.width || 1.414 }));
-                  setTick((t) => t + 1);
+                  setAspect((a) => (a[pn] ? a : { ...a, [pn]: p.height / p.width || 1.414 }));
                 }}
                 onRenderTextLayerSuccess={() => setTick((t) => t + 1)}
               />
