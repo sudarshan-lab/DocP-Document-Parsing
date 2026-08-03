@@ -203,6 +203,18 @@ export const updateFile = (id: string, patch: { fileName?: string; tags?: string
 export const listAllTables = (userId: string) =>
   api.get("/api/tables", { params: { userId } }).then((r) => r.data as SavedTableItem[]);
 
+export interface ContentHit {
+  fileId: string;
+  fileName: string;
+  folderId: string | null;
+  count: number;
+  snippet: string;
+  inName: boolean;
+}
+
+export const searchContent = (userId: string, q: string) =>
+  api.get("/api/search", { params: { userId, q } }).then((r) => r.data.results as ContentHit[]);
+
 export const getTable = (id: string) =>
   api.get(`/api/tables/${id}`).then((r) => r.data as SavedTableItem);
 

@@ -14,8 +14,10 @@ import {
   createFolder,
   deleteFile,
   deleteFolder,
+  searchContent,
   FileItem,
   FolderItem,
+  ContentHit,
 } from "../api";
 
 const MAX_MB = 4.5;
@@ -32,6 +34,9 @@ export default function Documents() {
   const [ask, setAsk] = useState<{ ids: string[]; label: string; folderId?: string } | null>(null);
   const [pending, setPending] = useState<File[] | null>(null);
   const [setName, setSetName] = useState("");
+  const [mode, setMode] = useState<"names" | "content">("names");
+  const [hits, setHits] = useState<ContentHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const q = sp.get("q") || "";
   const setQ = (v: string) => setSp(v ? { q: v } : {}, { replace: true });
 
@@ -52,6 +57,20 @@ export default function Documents() {
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, [files, load]);
+  useEffect(() => {
+    if (mode !== "content" || !q.trim()) {
+      setHits(null);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(() => {
+      searchContent(user._id, q.trim())
+        .then(setHits)
+        .catch(() => setHits([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [mode, q, user._id]);
 
   const sizeOk = (f: File) => {
     if (f.size > MAX_MB * 1024 * 1024) {
@@ -260,7 +279,15 @@ export default function Documents() {
         </div>
 
         <div className="card" style={{ display: "flex", gap: 8, padding: 10, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <input placeholder="Search files…" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 280, height: 30 }} />
+          <input placeholder={mode === "content" ? "Search inside all documents…" : "Search files…"} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260, height: 30 }} />
+          <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden" }}>
+            <button className="btn btn-sm" style={{ border: "none", borderRadius: 0, background: mode === "names" ? "var(--overlay)" : "transparent" }} onClick={() => setMode("names")}>
+              Names
+            </button>
+            <button className="btn btn-sm" style={{ border: "none", borderRadius: 0, background: mode === "content" ? "var(--overlay)" : "transparent" }} onClick={() => setMode("content")}>
+              Content
+            </button>
+          </div>
           <button className="btn btn-sm" onClick={() => toggleMany(allVisibleReady)}>
             {allVisibleReady.length > 0 && allVisibleReady.every((i) => selected.has(i)) ? "Clear all" : "Select all"}
           </button>
@@ -279,7 +306,36 @@ export default function Documents() {
           </button>
         </div>
 
-        {files.length === 0 ? (
+        {mode === "content" && q.trim() ? (
+          searching ? (
+            <div className="card" style={{ padding: 20 }}>
+              <LoadingMessages compact />
+            </div>
+          ) : !hits || hits.length === 0 ? (
+            <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--muted)" }}>
+              No documents contain “{q}”.
+            </div>
+          ) : (
+            <div className="list">
+              {hits.map((h) => (
+                <div key={h.fileId} className="row clickable" onClick={() => nav(`/files/${h.fileId}`)}>
+                  <span>▤</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {h.fileName}
+                    </div>
+                    {h.snippet && (
+                      <div className="faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {h.snippet}
+                      </div>
+                    )}
+                  </div>
+                  {h.count > 0 && <span className="label">{h.count} hits</span>}
+                </div>
+              ))}
+            </div>
+          )
+        ) : files.length === 0 ? (
           <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
             No documents yet. Drop files anywhere here or click <strong>Upload files</strong>.
           </div>
