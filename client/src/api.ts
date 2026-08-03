@@ -215,6 +215,16 @@ export interface ContentHit {
 export const searchContent = (userId: string, q: string) =>
   api.get("/api/search", { params: { userId, q } }).then((r) => r.data.results as ContentHit[]);
 
+export interface AskSource {
+  fileId: string;
+  fileName: string;
+}
+
+export const askAll = (userId: string, question: string) =>
+  api
+    .post("/api/ask", { userId, question })
+    .then((r) => r.data as { data: any; sources: AskSource[]; validation: Validation | null });
+
 export const getTable = (id: string) =>
   api.get(`/api/tables/${id}`).then((r) => r.data as SavedTableItem);
 

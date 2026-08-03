@@ -4,6 +4,7 @@ import { getUser, logout } from "../auth";
 
 const NAV = [
   { to: "/", label: "Overview", icon: "▚", end: true },
+  { to: "/ask", label: "Ask everything", icon: "🔎" },
   { to: "/documents", label: "Documents", icon: "▤" },
   { to: "/tables", label: "Saved tables", icon: "▦" },
   { to: "/settings", label: "Settings", icon: "⚙" },
@@ -33,7 +34,7 @@ export default function AppShell({
 
   const search = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && q.trim())
-      navigate(`/documents?q=${encodeURIComponent(q.trim())}`);
+      navigate(`/ask?q=${encodeURIComponent(q.trim())}`);
   };
 
   return (
@@ -47,7 +48,7 @@ export default function AppShell({
           <span style={{ color: "var(--accent)" }}>◆</span> DocP
         </Link>
         <input
-          placeholder="Search documents…"
+          placeholder="Ask across all documents…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={search}

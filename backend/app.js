@@ -9,10 +9,12 @@ const pdfParse = require('pdf-parse');
 const path = require('path');
 
 require('./connection');
+const mongoose = require('mongoose');
 const File = require('./File');
 const Folder = require('./Folder');
 const TableResult = require('./TableResult');
 const SavedPrompt = require('./SavedPrompt');
+const Chunk = require('./Chunk');
 const userModel = require('./userModel');
 const bcrypt = require('bcryptjs');
 const { sendOtpEmail, send2faEnabledEmail } = require('./mailer');
@@ -47,6 +49,68 @@ const textract = new AWS.Textract({
 });
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Bedrock (Titan) embeddings for cross-document semantic search
+const bedrock = new AWS.BedrockRuntime({
+  region: process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-2',
+});
+
+async function embed(text) {
+  const res = await bedrock
+    .invokeModel({
+      modelId: 'amazon.titan-embed-text-v2:0',
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify({ inputText: String(text || '').slice(0, 8000) }),
+    })
+    .promise();
+  return JSON.parse(res.body.toString()).embedding;
+}
+
+function chunkText(text, size = 2000, overlap = 200) {
+  const clean = String(text || '').trim();
+  const chunks = [];
+  for (let i = 0; i < clean.length; i += size - overlap) {
+    const piece = clean.slice(i, i + size).trim();
+    if (piece) chunks.push(piece);
+    if (i + size >= clean.length) break;
+    if (chunks.length >= 300) break;
+  }
+  return chunks;
+}
+
+// Best-effort: (re)build a file's chunk embeddings. Never throws, and stops
+// early if Bedrock isn't available yet (IAM/access pending).
+async function embedFile(file) {
+  try {
+    if (!file || !file.rawText) return 0;
+    await Chunk.deleteMany({ fileId: file._id });
+    const pieces = chunkText(file.rawText);
+    let idx = 0;
+    for (const piece of pieces) {
+      let embedding;
+      try {
+        embedding = await embed(piece);
+      } catch (e) {
+        console.error('embed error (Bedrock access?):', e && e.code);
+        return idx;
+      }
+      await Chunk.create({
+        userId: file.userId,
+        fileId: file._id,
+        fileName: file.fileName,
+        folderId: file.folderId || null,
+        chunkIndex: idx++,
+        text: piece,
+        embedding,
+      });
+    }
+    return idx;
+  } catch (e) {
+    console.error('embedFile error:', e && e.message);
+    return 0;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Textract: async document analysis -> raw text + CSV of detected tables
@@ -235,6 +299,8 @@ async function processFile(fileId, meta) {
         ? overview.suggestedQuestions
         : [],
     });
+    const doc = await File.findById(fileId);
+    if (doc) embedFile(doc); // best-effort background embedding for semantic search
   } catch (err) {
     console.error('processFile error:', err && err.message);
     await File.findByIdAndUpdate(fileId, { status: 'failed', error: (err && err.message) || 'Processing failed' });
@@ -731,6 +797,7 @@ app.delete('/api/folders/:id', async (req, res) => {
         console.error('s3 delete failed:', e && e.message);
       }
       await TableResult.deleteMany({ fileId: file._id });
+      await Chunk.deleteMany({ fileId: file._id });
       await File.findByIdAndDelete(file._id);
     }
     await Folder.findByIdAndDelete(req.params.id);
@@ -777,6 +844,76 @@ app.post('/api/query', async (req, res) => {
   } catch (err) {
     console.error('multi-query error:', err && err.message);
     res.status(500).json({ message: 'Failed to generate answer' });
+  }
+});
+
+// Global semantic search: ask a question across ALL of a user's documents (RAG)
+app.post('/api/ask', async (req, res) => {
+  try {
+    const { userId, question } = req.body;
+    if (!userId || !question || !String(question).trim())
+      return res.status(400).json({ message: 'Question is required' });
+
+    let qEmb;
+    try {
+      qEmb = await embed(question);
+    } catch (e) {
+      return res
+        .status(502)
+        .json({ message: 'Semantic search is not enabled yet (Bedrock access pending).' });
+    }
+
+    let hits = [];
+    try {
+      hits = await Chunk.aggregate([
+        {
+          $vectorSearch: {
+            index: 'vector_index',
+            path: 'embedding',
+            queryVector: qEmb,
+            numCandidates: 120,
+            limit: 8,
+            filter: { userId: new mongoose.Types.ObjectId(String(userId)) },
+          },
+        },
+        { $project: { text: 1, fileId: 1, fileName: 1, score: { $meta: 'vectorSearchScore' } } },
+      ]);
+    } catch (e) {
+      console.error('vectorSearch error:', e && e.message);
+      return res.status(502).json({ message: 'The search index is not ready yet.' });
+    }
+
+    if (!hits.length)
+      return res.json({
+        data: { note: 'No relevant content found across your documents yet.' },
+        sources: [],
+        validation: null,
+      });
+
+    const context = hits.map((h) => `===== FILE: ${h.fileName} =====\n${h.text}`).join('\n\n');
+    const u = await userModel.findById(userId).select('customInstructions').catch(() => null);
+    const raw = await askClaude(context, '', question, u && u.customInstructions);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { answer: raw };
+    }
+    const validation = await validateAnswer(context, question, data);
+
+    const seen = new Set();
+    const sources = [];
+    for (const h of hits) {
+      const idStr = String(h.fileId);
+      if (!seen.has(idStr)) {
+        seen.add(idStr);
+        sources.push({ fileId: h.fileId, fileName: h.fileName });
+      }
+    }
+    res.json({ data, sources, validation });
+  } catch (err) {
+    console.error('ask error:', err && err.message);
+    res.status(500).json({ message: 'Failed to answer' });
   }
 });
 
@@ -987,6 +1124,7 @@ app.delete('/api/files/:id', async (req, res) => {
         console.error('s3 delete failed:', e && e.message);
       }
       await TableResult.deleteMany({ fileId: file._id });
+      await Chunk.deleteMany({ fileId: file._id });
       await File.findByIdAndDelete(file._id);
     }
     res.json({ message: 'File deleted' });

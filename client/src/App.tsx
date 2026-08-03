@@ -9,6 +9,7 @@ import Settings from "./pages/Settings";
 import FilePage from "./pages/FilePage";
 import FolderPage from "./pages/FolderPage";
 import TablePage from "./pages/TablePage";
+import AskPage from "./pages/AskPage";
 import { isAuthed } from "./auth";
 
 function Protected({ children }: { children: JSX.Element }) {
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/" element={<Home />} />
+        <Route path="/ask" element={<Protected><AskPage /></Protected>} />
         <Route path="/documents" element={<Protected><Documents /></Protected>} />
         <Route path="/tables" element={<Protected><Tables /></Protected>} />
         <Route path="/tables/:id" element={<Protected><TablePage /></Protected>} />
