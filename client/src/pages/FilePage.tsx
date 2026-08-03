@@ -39,7 +39,8 @@ export default function FilePage() {
   const [docView, setDocView] = useState<"original" | "text">("original");
   const [findOpen, setFindOpen] = useState(false);
   const [findQ, setFindQ] = useState("");
-  const [dFind, setDFind] = useState("");
+  const [committed, setCommitted] = useState("");
+  const [searching, setSearching] = useState(false);
   const [cur, setCur] = useState(0);
   const [docText, setDocText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
@@ -87,12 +88,22 @@ export default function FilePage() {
   const closeFind = () => {
     setFindOpen(false);
     setFindQ("");
+    setCommitted("");
+    setSearching(false);
   };
+  const onPdfCount = useCallback((n: number) => {
+    setPdfCount(n);
+    setSearching(false);
+  }, []);
+  const onImageCount = useCallback((n: number) => {
+    setImageCount(n);
+    setSearching(false);
+  }, []);
 
   const matchCount = useMemo(() => {
-    if (!docText || !dFind) return 0;
+    if (!docText || !committed) return 0;
     const lower = docText.toLowerCase();
-    const ql = dFind.toLowerCase();
+    const ql = committed.toLowerCase();
     let n = 0;
     let i = 0;
     for (;;) {
@@ -102,15 +113,15 @@ export default function FilePage() {
       i = idx + ql.length;
     }
     return n;
-  }, [docText, dFind]);
+  }, [docText, committed]);
 
   const renderedText = useMemo(() => {
     matchRefs.current = [];
     if (!docText) return null;
-    if (!dFind) return docText;
+    if (!committed) return docText;
     const parts: any[] = [];
     const lower = docText.toLowerCase();
-    const ql = dFind.toLowerCase();
+    const ql = committed.toLowerCase();
     let i = 0;
     let m = 0;
     for (;;) {
@@ -135,27 +146,22 @@ export default function FilePage() {
             boxShadow: mi === cur ? "0 0 0 2px #ff9632" : "none",
           }}
         >
-          {docText.slice(idx, idx + dFind.length)}
+          {docText.slice(idx, idx + committed.length)}
         </mark>
       );
-      i = idx + dFind.length;
+      i = idx + committed.length;
       m++;
     }
     return parts;
-  }, [docText, dFind, cur]);
+  }, [docText, committed, cur]);
 
   const count =
     docView === "text" ? matchCount : isPdf ? pdfCount : isImage ? imageCount : matchCount;
 
-  // debounce the text-view highlight query
-  useEffect(() => {
-    const t = setTimeout(() => setDFind(findQ.trim()), 200);
-    return () => clearTimeout(t);
-  }, [findQ]);
-  // reset to the first match when the query or the view changes
+  // reset to the first match when a new search is committed or the view changes
   useEffect(() => {
     setCur(0);
-  }, [findQ, docView]);
+  }, [committed, docView]);
   // scroll the current match into view (text view; the PDF view scrolls itself)
   useEffect(() => {
     if (docView === "text" && matchCount > 0)
@@ -226,6 +232,13 @@ export default function FilePage() {
     } catch {
       message.error("Could not delete");
     }
+  };
+
+  const submitFind = () => {
+    const v = findQ.trim();
+    setCommitted(v);
+    setCur(0);
+    setSearching(!!v && (isPdf || isImage));
   };
 
   const segStyle = (on: boolean): React.CSSProperties => ({
@@ -367,23 +380,35 @@ export default function FilePage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          e.shiftKey ? prev() : next();
+                          if (committed && findQ.trim() === committed) (e.shiftKey ? prev() : next());
+                          else submitFind();
                         } else if (e.key === "Escape") {
                           closeFind();
                         }
                       }}
-                      placeholder="Find in document"
+                      placeholder="Type, then Enter or ✓"
                       style={{ height: 28, width: 190 }}
                     />
-                    <span className="faint" style={{ fontSize: 12, minWidth: 62, textAlign: "center" }}>
-                      {count ? `${cur + 1} of ${count}` : findQ ? "0 results" : ""}
-                    </span>
-                    <button className="btn btn-sm" onClick={prev} disabled={!count} title="Previous (Shift+Enter)">
-                      ↑
+                    <button className="btn btn-sm btn-primary" onClick={submitFind} title="Search (Enter)">
+                      ✓
                     </button>
-                    <button className="btn btn-sm" onClick={next} disabled={!count} title="Next (Enter)">
-                      ↓
-                    </button>
+                    {searching ? (
+                      <span className="faint" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span className="spin" style={{ display: "inline-block" }}>⟳</span> Searching…
+                      </span>
+                    ) : committed ? (
+                      <>
+                        <span className="faint" style={{ fontSize: 12, minWidth: 56, textAlign: "center" }}>
+                          {count ? `${cur + 1} of ${count}` : "0 results"}
+                        </span>
+                        <button className="btn btn-sm" onClick={prev} disabled={!count} title="Previous (Shift+Enter)">
+                          ↑
+                        </button>
+                        <button className="btn btn-sm" onClick={next} disabled={!count} title="Next (Enter)">
+                          ↓
+                        </button>
+                      </>
+                    ) : null}
                     <button className="btn btn-sm btn-ghost" onClick={closeFind} title="Close (Esc)">
                       ✕
                     </button>
@@ -420,18 +445,18 @@ export default function FilePage() {
                   <PdfViewer
                     url={`/api/files/${file._id}/raw`}
                     fileId={file._id}
-                    query={findQ}
+                    query={committed}
                     activeIndex={cur}
-                    onCount={setPdfCount}
+                    onCount={onPdfCount}
                   />
                 ) : isImage ? (
                   <ImageViewer
                     id={file._id}
                     viewUrl={viewUrl}
                     fileName={file.fileName}
-                    query={findQ}
+                    query={committed}
                     activeIndex={cur}
-                    onCount={setImageCount}
+                    onCount={onImageCount}
                   />
                 ) : (
                   <div style={{ height: "100%", display: "grid", placeItems: "center", textAlign: "center", padding: 24 }}>
