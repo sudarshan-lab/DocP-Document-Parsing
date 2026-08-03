@@ -14,7 +14,7 @@ tables back that you can visualize, export, and save. Extraction is powered by
 
 ## Features
 
-- **Upload → parse → ask → save** workflow with a GitHub-style, compact UI (dark & light themes).
+- **Upload → parse → ask → save** workflow with compact UI (dark & light themes).
 - **Async extraction:** upload returns immediately; the document is parsed in the background and
   the UI polls until it's `ready`.
 - **AI overview** per document: auto summary, key facts, and suggested questions.
