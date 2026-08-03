@@ -215,11 +215,3 @@ npx vercel --prod
 fallback route. So you can also serve everything from the EC2 backend on port 9000 without Vercel.
 
 ---
-
-## Security notes
-
-- Passwords are currently stored as-is and auth is unauthenticated beyond a `userId` — this is a
-  demo-grade setup, **not** production-hardened. Add hashing (bcrypt) and real sessions/JWT before
-  any real use.
-- Never commit `backend/.env`. Rotate any credentials that have been shared or exposed.
-- Uploaded files are private in S3 and only exposed via short-lived presigned URLs.
