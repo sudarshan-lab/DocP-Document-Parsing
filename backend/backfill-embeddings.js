@@ -1,28 +1,39 @@
 // One-time (re-runnable) backfill: chunk + embed every ready document.
 // Batches texts per Voyage request and retries on 429 (free-tier rate limits).
 require('dotenv').config();
-const AWS = require('aws-sdk');
+const axios = require('axios');
 const conn = require('./connection');
 const File = require('./File');
 const Chunk = require('./Chunk');
 
-const bedrock = new AWS.BedrockRuntime({ region: process.env.BEDROCK_REGION || 'us-east-1' });
-
-async function embedOne(text) {
-  const res = await bedrock
-    .invokeModel({
-      modelId: 'amazon.titan-embed-text-v2:0',
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify({ inputText: String(text || '').slice(0, 8000) }),
-    })
-    .promise();
-  return JSON.parse(res.body.toString()).embedding;
-}
 async function voyageEmbed(inputs) {
-  const out = [];
-  for (const t of inputs) out.push(await embedOne(t));
-  return out;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await axios.post(
+        'https://api.voyageai.com/v1/embeddings',
+        { input: inputs, model: 'voyage-4-lite', input_type: 'document', output_dimension: 1024 },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 60000,
+        }
+      );
+      return res.data.data
+        .slice()
+        .sort((a, b) => a.index - b.index)
+        .map((d) => d.embedding);
+    } catch (e) {
+      const code = e.response && e.response.status;
+      if (code === 429 && attempt < 12) {
+        console.log('  rate-limited (429) — waiting 25s…');
+        await new Promise((r) => setTimeout(r, 25000));
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 
 function chunkText(text, size = 2000, overlap = 200) {

@@ -51,26 +51,47 @@ const textract = new AWS.Textract({
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// AWS Bedrock (Titan Text Embeddings V2) — 1024-dim, matches the Atlas vector
-// index. Titan embeds a single text per call; embedBatch loops for the batched
-// callers. Activates once the AWS account's Bedrock access is available.
-const bedrock = new AWS.BedrockRuntime({ region: process.env.BEDROCK_REGION || 'us-east-1' });
-
-async function embed(text /* inputType ignored by Titan */) {
-  const res = await bedrock
-    .invokeModel({
-      modelId: 'amazon.titan-embed-text-v2:0',
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify({ inputText: String(text || '').slice(0, 8000) }),
-    })
-    .promise();
-  return JSON.parse(res.body.toString()).embedding;
+// Voyage AI embeddings — voyage-4-lite at output_dimension 1024 (matches the
+// Atlas index; 200M free tokens on the voyage-4 generation). Batches per
+// request and retries on 429 (rate limits).
+const VOYAGE_MODEL = 'voyage-4-lite';
+async function voyageEmbed(inputs, inputType = 'document') {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await axios.post(
+        'https://api.voyageai.com/v1/embeddings',
+        { input: inputs, model: VOYAGE_MODEL, input_type: inputType, output_dimension: 1024 },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 60000,
+        }
+      );
+      return res.data.data
+        .slice()
+        .sort((a, b) => a.index - b.index)
+        .map((d) => d.embedding);
+    } catch (e) {
+      const code = e.response && e.response.status;
+      if (code === 429 && attempt < 10) {
+        await new Promise((r) => setTimeout(r, 20000));
+        continue;
+      }
+      throw e;
+    }
+  }
 }
-async function embedBatch(texts) {
-  const out = [];
-  for (const t of texts) out.push(await embed(t));
-  return out;
+async function embed(text, inputType = 'document') {
+  const [v] = await voyageEmbed([String(text || '').slice(0, 8000)], inputType);
+  return v;
+}
+async function embedBatch(texts, inputType = 'document') {
+  return voyageEmbed(
+    texts.map((t) => String(t || '').slice(0, 8000)),
+    inputType
+  );
 }
 
 function chunkText(text, size = 2000, overlap = 200) {
