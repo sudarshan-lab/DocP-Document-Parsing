@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const Anthropic = require('@anthropic-ai/sdk');
+const axios = require('axios');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const express = require('express');
@@ -50,12 +51,12 @@ const textract = new AWS.Textract({
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Bedrock (Titan) embeddings for cross-document semantic search
-const bedrock = new AWS.BedrockRuntime({
-  region: process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-2',
-});
+// AWS Bedrock (Titan Text Embeddings V2) — 1024-dim, matches the Atlas vector
+// index. Titan embeds a single text per call; embedBatch loops for the batched
+// callers. Activates once the AWS account's Bedrock access is available.
+const bedrock = new AWS.BedrockRuntime({ region: process.env.BEDROCK_REGION || 'us-east-1' });
 
-async function embed(text) {
+async function embed(text /* inputType ignored by Titan */) {
   const res = await bedrock
     .invokeModel({
       modelId: 'amazon.titan-embed-text-v2:0',
@@ -65,6 +66,11 @@ async function embed(text) {
     })
     .promise();
   return JSON.parse(res.body.toString()).embedding;
+}
+async function embedBatch(texts) {
+  const out = [];
+  for (const t of texts) out.push(await embed(t));
+  return out;
 }
 
 function chunkText(text, size = 2000, overlap = 200) {
@@ -87,23 +93,27 @@ async function embedFile(file) {
     await Chunk.deleteMany({ fileId: file._id });
     const pieces = chunkText(file.rawText);
     let idx = 0;
-    for (const piece of pieces) {
-      let embedding;
+    const B = 20;
+    for (let b = 0; b < pieces.length; b += B) {
+      const batch = pieces.slice(b, b + B);
+      let embs;
       try {
-        embedding = await embed(piece);
+        embs = await embedBatch(batch);
       } catch (e) {
-        console.error('embed error (Bedrock access?):', e && e.code);
+        console.error('embed error:', e && e.message);
         return idx;
       }
-      await Chunk.create({
-        userId: file.userId,
-        fileId: file._id,
-        fileName: file.fileName,
-        folderId: file.folderId || null,
-        chunkIndex: idx++,
-        text: piece,
-        embedding,
-      });
+      for (let j = 0; j < batch.length; j++) {
+        await Chunk.create({
+          userId: file.userId,
+          fileId: file._id,
+          fileName: file.fileName,
+          folderId: file.folderId || null,
+          chunkIndex: idx++,
+          text: batch[j],
+          embedding: embs[j],
+        });
+      }
     }
     return idx;
   } catch (e) {
@@ -856,11 +866,10 @@ app.post('/api/ask', async (req, res) => {
 
     let qEmb;
     try {
-      qEmb = await embed(question);
+      qEmb = await embed(question, 'query');
     } catch (e) {
-      return res
-        .status(502)
-        .json({ message: 'Semantic search is not enabled yet (Bedrock access pending).' });
+      console.error('embed (ask) error:', e && e.message);
+      return res.status(502).json({ message: 'Semantic search is temporarily unavailable.' });
     }
 
     let hits = [];

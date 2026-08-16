@@ -1,17 +1,14 @@
-// One-time (re-runnable) backfill: chunk + embed every ready document that
-// doesn't have embeddings yet. Skips files that already have chunks, so it's
-// safe to re-run. Requires the Bedrock IAM permission to be in place.
+// One-time (re-runnable) backfill: chunk + embed every ready document.
+// Batches texts per Voyage request and retries on 429 (free-tier rate limits).
 require('dotenv').config();
 const AWS = require('aws-sdk');
 const conn = require('./connection');
 const File = require('./File');
 const Chunk = require('./Chunk');
 
-const bedrock = new AWS.BedrockRuntime({
-  region: process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-2',
-});
+const bedrock = new AWS.BedrockRuntime({ region: process.env.BEDROCK_REGION || 'us-east-1' });
 
-async function embed(text) {
+async function embedOne(text) {
   const res = await bedrock
     .invokeModel({
       modelId: 'amazon.titan-embed-text-v2:0',
@@ -21,6 +18,11 @@ async function embed(text) {
     })
     .promise();
   return JSON.parse(res.body.toString()).embedding;
+}
+async function voyageEmbed(inputs) {
+  const out = [];
+  for (const t of inputs) out.push(await embedOne(t));
+  return out;
 }
 
 function chunkText(text, size = 2000, overlap = 200) {
@@ -43,29 +45,32 @@ function chunkText(text, size = 2000, overlap = 200) {
     let total = 0;
     for (const f of files) {
       if (!f.rawText) continue;
-      const existing = await Chunk.countDocuments({ fileId: f._id });
-      if (existing > 0) continue;
+      await Chunk.deleteMany({ fileId: f._id });
       const pieces = chunkText(f.rawText);
       let idx = 0;
-      for (const piece of pieces) {
-        const embedding = await embed(piece);
-        await Chunk.create({
-          userId: f.userId,
-          fileId: f._id,
-          fileName: f.fileName,
-          folderId: f.folderId || null,
-          chunkIndex: idx++,
-          text: piece,
-          embedding,
-        });
-        total++;
+      const B = 20;
+      for (let b = 0; b < pieces.length; b += B) {
+        const batch = pieces.slice(b, b + B).map((t) => String(t).slice(0, 8000));
+        const embs = await voyageEmbed(batch);
+        for (let j = 0; j < batch.length; j++) {
+          await Chunk.create({
+            userId: f.userId,
+            fileId: f._id,
+            fileName: f.fileName,
+            folderId: f.folderId || null,
+            chunkIndex: idx++,
+            text: batch[j],
+            embedding: embs[j],
+          });
+          total++;
+        }
       }
       done++;
-      console.log(`embedded "${f.fileName}" — ${idx} chunks`);
+      console.log(`[${done}] embedded "${f.fileName}" — ${idx} chunks`);
     }
     console.log(`Backfill complete: ${done} files, ${total} chunks.`);
   } catch (e) {
-    console.error('backfill error:', e && e.message);
+    console.error('backfill error:', e && (e.response ? e.response.status : e.message));
   } finally {
     process.exit(0);
   }
