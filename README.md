@@ -142,19 +142,6 @@ client/
 
 ---
 
-## Data model (MongoDB collections)
-
-| Collection | Key fields |
-|---|---|
-| `users` | firstName, lastName, userName, email, `password` (bcrypt), twoFactorEnabled, otp/otpExpires, lastTwoFactorNudge, `customInstructions` |
-| `files` | userId, folderId, fileName, s3Key, mimeType, status, `rawText`, summary, keyFacts, suggestedQuestions, tags, `words` (OCR bounding boxes) |
-| `folders` | userId, name |
-| `tableresults` | userId, fileId / fileIds, folderId, title, sourceLabel, sourceFileNames, query, `data` |
-| `savedprompts` | userId, title, prompt |
-| `chunks` | userId, fileId, fileName, folderId, chunkIndex, text, `embedding` (1024-dim) |
-
----
-
 ## Environment variables (`backend/.env`)
 
 ```bash
