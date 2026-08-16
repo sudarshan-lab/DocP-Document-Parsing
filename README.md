@@ -6,7 +6,6 @@ lets you chat with a single document or a whole collection, validates every answ
 the source, and can **search and reason across your entire library** with citations.
 
 - **Live app:** https://cndocp.vercel.app
-- **Repo:** https://github.com/sudarshan-lab/DocP-Document-Parsing
 
 > There are no seeded accounts — open the app and **create an account** to get started.
 
